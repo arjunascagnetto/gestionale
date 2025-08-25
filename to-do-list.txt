@@ -1,0 +1,75 @@
+# TO-DO LIST PER IL PROGETTO DI GESTIONE PAGAMENTI
+
+## Configurazione e Setup iniziale
+- [ ] Creare l'ambiente di sviluppo (scegliere linguaggio/framework)
+- [ ] Impostare un sistema di controllo versione (Git)
+- [ ] Configurare l'accesso all'API di Telegram Bot
+- [ ] Configurare l'accesso al calendario Nextcloud
+- [ ] Progettare e creare lo schema del database
+
+## Implementazione Database
+- [ ] Creare tabella 'pagamenti'
+- [ ] Creare tabella 'lezioni'
+- [ ] Creare tabella 'associazioni'
+- [ ] Creare tabella 'pagamenti_lezioni'
+- [ ] Configurare indici appropriati
+- [ ] Creare script di inizializzazione/migrazione DB
+
+## Sviluppo componente 1: Ingestore Pagamenti
+- [ ] Implementare connessione API Telegram
+- [ ] Sviluppare logica di parsing dei messaggi da Telegram
+- [ ] Implementare meccanismo di estrazione dati (nome_pagante, giorno, ora, somma)
+- [ ] Creare sistema di deduplicazione basato su message ID/hash
+- [ ] Implementare inserimento/aggiornamento nel DB con stato='sospeso'
+- [ ] Aggiungere logging appropriato
+- [ ] Creare unit test
+
+## Sviluppo componente 2: Risolutore di Associazioni
+- [ ] Implementare connessione a Nextcloud per leggere il calendario "lezioni"
+- [ ] Sviluppare logica per estrarre nome_studente e dettagli lezione
+- [ ] Implementare sistema di ricerca nelle associazioni esistenti
+- [ ] Creare meccanismo per generare scelte multiple su Telegram (inline keyboard)
+- [ ] Implementare callback handler per le selezioni utente
+- [ ] Sviluppare logica per aggiornare associazioni e pagamenti
+- [ ] Aggiungere logging appropriato
+- [ ] Creare unit test
+
+## Sviluppo componente 3: Sincronizzatore Calendari
+- [ ] Implementare lettura eventi da Nextcloud "lezioni"
+- [ ] Sviluppare logica per verificare associazioni e pagamenti disponibili
+- [ ] Implementare spostamento o copia+chiusura degli eventi nel calendario "pagate"
+- [ ] Creare sistema per gestire pagamenti consumati/residui
+- [ ] Implementare gestione degli errori e mismatch
+- [ ] Sviluppare meccanismo di notifica su Telegram
+- [ ] Aggiungere logging appropriato
+- [ ] Creare unit test
+
+## Pianificazione ed Orchestrazione
+- [ ] Configurare scheduler per eseguire i componenti in sequenza
+- [ ] Impostare orari corretti (8:00, 8:02, 8:05 MSK)
+- [ ] Gestire configurazione del fuso orario
+- [ ] Implementare controlli di dipendenza tra componenti
+
+## Documentazione
+- [ ] Documentare API e interfacce
+- [ ] Creare documentazione per l'utente
+- [ ] Documentare procedure di backup/ripristino
+- [ ] Creare diagrammi di flusso aggiornati
+
+## Testing e QA
+- [ ] Creare test di integrazione
+- [ ] Implementare test di sistema end-to-end
+- [ ] Testare scenari di errore e recovery
+- [ ] Verificare performance sotto carico
+
+## Monitoring e Manutenzione
+- [ ] Implementare dashboard di monitoraggio
+- [ ] Configurare sistema di allarmi
+- [ ] Creare meccanismo di backup automatico
+- [ ] Implementare strumenti di manutenzione DB
+
+## Deployment
+- [ ] Preparare ambiente di produzione
+- [ ] Configurare deployment automatizzato
+- [ ] Implementare strategia di rollback
+- [ ] Eseguire migrazione iniziale dati (se necessario)
