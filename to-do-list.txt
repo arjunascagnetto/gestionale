@@ -1,26 +1,31 @@
 # TO-DO LIST PER IL PROGETTO DI GESTIONE PAGAMENTI
 
 ## Configurazione e Setup iniziale
-- [ ] Creare l'ambiente di sviluppo (scegliere linguaggio/framework)
-- [ ] Impostare un sistema di controllo versione (Git)
-- [ ] Configurare l'accesso all'API di Telegram Bot
-- [ ] Configurare l'accesso al calendario Nextcloud
-- [ ] Progettare e creare lo schema del database
+- [x] Creare l'ambiente di sviluppo (Python venv in .cal)
+- [x] Impostare un sistema di controllo versione (Git)
+- [x] Configurare l'accesso all'API di Telegram Bot (token in .env)
+- [x] Configurare l'accesso al calendario Nextcloud (credenziali in .env, test in nextcloud_connect_test.py)
+- [x] Progettare e creare lo schema del database
 
 ## Implementazione Database
-- [ ] Creare tabella 'pagamenti'
-- [ ] Creare tabella 'lezioni'
-- [ ] Creare tabella 'associazioni'
-- [ ] Creare tabella 'pagamenti_lezioni'
-- [ ] Configurare indici appropriati
-- [ ] Creare script di inizializzazione/migrazione DB
+- [x] Scegliere il database (SQLite)
+- [x] Creare tabella 'pagamenti'
+- [x] Creare tabella 'lezioni'
+- [x] Creare tabella 'associazioni'
+- [x] Creare tabella 'pagamenti_lezioni'
+- [x] Configurare indici appropriati
+- [x] Creare script di inizializzazione/migrazione DB (db_create_schema.py)
 
 ## Sviluppo componente 1: Ingestore Pagamenti
-- [ ] Implementare connessione API Telegram
-- [ ] Sviluppare logica di parsing dei messaggi da Telegram
-- [ ] Implementare meccanismo di estrazione dati (nome_pagante, giorno, ora, somma)
-- [ ] Creare sistema di deduplicazione basato su message ID/hash
-- [ ] Implementare inserimento/aggiornamento nel DB con stato='sospeso'
+- [x] Implementare connessione API Telegram (Telethon User API)
+- [x] Configurare autenticazione Telegram (API_ID, API_HASH, phone, password)
+- [x] Sviluppare logica di parsing dei messaggi da Telegram (regex per SMS banca russa)
+- [x] Implementare meccanismo di estrazione dati (nome_pagante, giorno, ora, somma)
+- [x] Creare sistema di deduplicazione basato su message ID (fonte_msg_id unique)
+- [x] Implementare inserimento/aggiornamento nel DB con stato='sospeso'
+- [x] Creare whitelist mittenti validi (mittenti_whitelist.csv)
+- [x] Implementare filtro per escludere pagamenti da non-studenti
+- [x] Gestire parsing importi con spazi (es. "10 000")
 - [ ] Aggiungere logging appropriato
 - [ ] Creare unit test
 
@@ -35,7 +40,7 @@
 - [ ] Creare unit test
 
 ## Sviluppo componente 3: Sincronizzatore Calendari
-- [ ] Implementare lettura eventi da Nextcloud "lezioni"
+- [ ] Estendere il codice di nextcloud_connect_test.py per accedere al calendario "lezioni"
 - [ ] Sviluppare logica per verificare associazioni e pagamenti disponibili
 - [ ] Implementare spostamento o copia+chiusura degli eventi nel calendario "pagate"
 - [ ] Creare sistema per gestire pagamenti consumati/residui
@@ -43,6 +48,12 @@
 - [ ] Sviluppare meccanismo di notifica su Telegram
 - [ ] Aggiungere logging appropriato
 - [ ] Creare unit test
+
+## Struttura del Progetto
+- [ ] Organizzare il codice in moduli/package appropriati
+- [ ] Creare file di requirements.txt con le dipendenze
+- [ ] Impostare struttura di configurazione (config.py)
+- [ ] Creare script principali per ciascun componente
 
 ## Pianificazione ed Orchestrazione
 - [ ] Configurare scheduler per eseguire i componenti in sequenza
