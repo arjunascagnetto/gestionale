@@ -840,3 +840,214 @@
 2025-10-09 12:17:44,734 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
 2025-10-09 12:17:44,735 - telegram.ext.Application - INFO - Application is stopping. This might take a moment.
 2025-10-09 12:17:44,735 - telegram.ext.Application - INFO - Application.stop() complete
+2025-10-09 12:25:06,444 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-10-09 12:25:07,909 - __main__ - INFO - ✅ Sincronizzate 199 lezioni da Google Calendar
+2025-10-09 12:25:08,596 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getMe "HTTP/1.1 200 OK"
+2025-10-09 12:25:08,719 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/deleteWebhook "HTTP/1.1 200 OK"
+2025-10-09 12:25:08,720 - telegram.ext.Application - INFO - Application started
+2025-10-09 12:25:16,076 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:25:16,080 - __main__ - INFO - 📋 Totale pagamenti da processare: 10
+2025-10-09 12:25:16,081 - __main__ - INFO - ▶️ Processamento pagamento 1/10: ID 7
+2025-10-09 12:25:16,586 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:25:16,587 - __main__ - INFO - Processamento pagamento: Татьяна В. - 1700/1700RUB disponibile del 2025-10-06
+2025-10-09 12:25:16,587 - __main__ - INFO - Trovate 20 lezioni nel range ±3 giorni
+2025-10-09 12:25:16,747 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:25:26,208 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:25:36,329 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:25:46,455 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:25:52,647 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:25:53,122 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:25:53,134 - __main__ - INFO - ✅ Associazione salvata: Татьяна В. → Tatiana (auto: False, score: 0.0%)
+2025-10-09 12:25:53,146 - __main__ - INFO - ✅ Pagamento-lezione associato: Татьяна В. → Tatiana, quota: 1700
+2025-10-09 12:25:53,291 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:25:53,292 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 10
+2025-10-09 12:25:53,444 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:25:53,444 - __main__ - INFO - Processamento pagamento: Полина А. - 2000/2000RUB disponibile del 2025-10-05
+2025-10-09 12:25:53,445 - __main__ - INFO - Trovate 21 lezioni nel range ±3 giorni
+2025-10-09 12:25:53,601 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:26:02,779 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:26:12,905 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:26:23,031 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:26:33,162 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:26:42,387 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:26:42,389 - telegram.ext.Application - INFO - Application is stopping. This might take a moment.
+2025-10-09 12:26:42,390 - telegram.ext.Application - INFO - Application.stop() complete
+2025-10-09 12:27:25,701 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-10-09 12:27:27,141 - __main__ - INFO - ✅ Sincronizzate 200 lezioni da Google Calendar
+2025-10-09 12:27:27,707 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getMe "HTTP/1.1 200 OK"
+2025-10-09 12:27:27,829 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/deleteWebhook "HTTP/1.1 200 OK"
+2025-10-09 12:27:27,831 - telegram.ext.Application - INFO - Application started
+2025-10-09 12:27:33,998 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:27:34,000 - __main__ - INFO - 📋 Totale pagamenti da processare: 10
+2025-10-09 12:27:34,000 - __main__ - INFO - ▶️ Processamento pagamento 1/10: ID 10
+2025-10-09 12:27:34,497 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:27:34,498 - __main__ - INFO - Processamento pagamento: Полина А. - 2000/2000RUB disponibile del 2025-10-05
+2025-10-09 12:27:34,498 - __main__ - INFO - Trovate 22 lezioni nel range ±3 giorni
+2025-10-09 12:27:34,673 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:27:44,027 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:27:44,538 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:27:44,542 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-10-09 12:27:45,965 - __main__ - INFO - ✅ Sincronizzate 200 lezioni da Google Calendar
+2025-10-09 12:27:46,166 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:27:54,167 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:27:56,832 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:27:56,836 - __main__ - INFO - 📋 Totale pagamenti da processare: 10
+2025-10-09 12:27:56,836 - __main__ - INFO - ▶️ Processamento pagamento 1/10: ID 10
+2025-10-09 12:27:57,318 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:27:57,319 - __main__ - INFO - Processamento pagamento: Полина А. - 2000/2000RUB disponibile del 2025-10-05
+2025-10-09 12:27:57,319 - __main__ - INFO - Trovate 22 lezioni nel range ±3 giorni
+2025-10-09 12:27:57,476 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:05,579 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:06,063 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:28:06,078 - __main__ - INFO - ✅ Associazione salvata: Полина А. → Ksenya (auto: False, score: 0.0%)
+2025-10-09 12:28:06,090 - __main__ - INFO - ✅ Pagamento-lezione associato: Полина А. → Ksenya, quota: 2000
+2025-10-09 12:28:06,276 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:28:06,278 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 14
+2025-10-09 12:28:06,434 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:06,434 - __main__ - INFO - Processamento pagamento: Татьяна К. - 2300/2300RUB disponibile del 2025-10-03
+2025-10-09 12:28:06,435 - __main__ - INFO - Trovate 20 lezioni nel range ±3 giorni
+2025-10-09 12:28:06,608 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:15,706 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:16,298 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:16,876 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:28:16,888 - __main__ - INFO - ✅ Associazione salvata: Татьяна К. → Ева (auto: False, score: 0.0%)
+2025-10-09 12:28:16,905 - __main__ - INFO - ✅ Pagamento-lezione associato: Татьяна К. → Ева, quota: 2300
+2025-10-09 12:28:17,552 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:28:17,554 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 18
+2025-10-09 12:28:18,184 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:18,186 - __main__ - INFO - Processamento pagamento: Татьяна В. - 1700/1700RUB disponibile del 2025-10-02
+2025-10-09 12:28:18,187 - __main__ - INFO - ✅ Associazione esistente trovata: Татьяна В. → Tatiana
+2025-10-09 12:28:18,187 - __main__ - INFO - Trovate 1 lezioni nel range ±3 giorni
+2025-10-09 12:28:18,494 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:26,487 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:36,611 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:46,371 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:46,859 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:28:46,860 - __main__ - WARNING - ⚠️  Associazione già esistente: Татьяна В. → Tatiana
+2025-10-09 12:28:46,872 - __main__ - INFO - ✅ Pagamento-lezione associato: Татьяна В. → Tatiana, quota: 1700
+2025-10-09 12:28:47,019 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:28:47,020 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 19
+2025-10-09 12:28:47,180 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:47,180 - __main__ - INFO - Processamento pagamento: Сергей Х. - 2000/2000RUB disponibile del 2025-10-02
+2025-10-09 12:28:47,181 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:28:47,347 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:56,503 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:58,814 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:28:59,289 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:28:59,304 - __main__ - INFO - ✅ Associazione salvata: Сергей Х. → Sergey (auto: False, score: 0.0%)
+2025-10-09 12:28:59,316 - __main__ - INFO - ✅ Pagamento-lezione associato: Сергей Х. → Sergey, quota: 2000
+2025-10-09 12:28:59,477 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:28:59,478 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 20
+2025-10-09 12:28:59,660 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:28:59,660 - __main__ - INFO - Processamento pagamento: Дарья М. - 2000/2000RUB disponibile del 2025-10-02
+2025-10-09 12:28:59,661 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:28:59,853 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:08,939 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:09,756 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:10,318 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:29:10,332 - __main__ - INFO - ✅ Associazione salvata: Дарья М. → Daria (auto: False, score: 0.0%)
+2025-10-09 12:29:10,345 - __main__ - INFO - ✅ Pagamento-lezione associato: Дарья М. → Daria, quota: 2000
+2025-10-09 12:29:10,524 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:29:10,527 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 21
+2025-10-09 12:29:10,677 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:10,678 - __main__ - INFO - Processamento pagamento: Наили Г. - 2000/2000RUB disponibile del 2025-10-02
+2025-10-09 12:29:10,679 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:29:10,857 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:16,462 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:17,286 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:29:17,301 - __main__ - INFO - ✅ Associazione salvata: Наили Г. → Naili (auto: False, score: 0.0%)
+2025-10-09 12:29:17,316 - __main__ - INFO - ✅ Pagamento-lezione associato: Наили Г. → Naili, quota: 2000
+2025-10-09 12:29:17,514 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:29:17,515 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 22
+2025-10-09 12:29:17,663 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:17,664 - __main__ - INFO - Processamento pagamento: Анелия Т. - 2000/2000RUB disponibile del 2025-10-02
+2025-10-09 12:29:17,665 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:29:17,851 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:24,238 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:24,712 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:29:24,732 - __main__ - INFO - ✅ Associazione salvata: Анелия Т. → Anelia (auto: False, score: 0.0%)
+2025-10-09 12:29:24,746 - __main__ - INFO - ✅ Pagamento-lezione associato: Анелия Т. → Anelia, quota: 2000
+2025-10-09 12:29:24,892 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:29:24,894 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 23
+2025-10-09 12:29:25,048 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:25,049 - __main__ - INFO - Processamento pagamento: Алексей Ш. - 3000/3000RUB disponibile del 2025-10-01
+2025-10-09 12:29:25,050 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:29:25,212 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:34,379 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:37,851 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:38,333 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:29:38,356 - __main__ - INFO - ✅ Associazione salvata: Алексей Ш. → Alex (auto: False, score: 0.0%)
+2025-10-09 12:29:38,373 - __main__ - INFO - ✅ Pagamento-lezione associato: Алексей Ш. → Alex, quota: 3000
+2025-10-09 12:29:38,532 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:29:38,533 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 24
+2025-10-09 12:29:38,774 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:38,776 - __main__ - INFO - Processamento pagamento: Дмитрий П. - 2000/2000RUB disponibile del 2025-10-01
+2025-10-09 12:29:38,777 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:29:39,053 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:29:47,980 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:29:58,105 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:00,659 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:01,160 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:30:01,173 - __main__ - INFO - ✅ Associazione salvata: Дмитрий П. → dmitry (auto: False, score: 0.0%)
+2025-10-09 12:30:01,188 - __main__ - INFO - ✅ Pagamento-lezione associato: Дмитрий П. → dmitry, quota: 2000
+2025-10-09 12:30:01,332 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:30:01,333 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 26
+2025-10-09 12:30:01,614 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:01,616 - __main__ - INFO - Processamento pagamento: Екатерина А. - 2000/2000RUB disponibile del 2025-10-01
+2025-10-09 12:30:01,617 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:30:01,801 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:10,786 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:13,081 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:13,707 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:30:13,720 - __main__ - INFO - ✅ Associazione salvata: Екатерина А. → Ekaterina (auto: False, score: 0.0%)
+2025-10-09 12:30:13,734 - __main__ - INFO - ✅ Pagamento-lezione associato: Екатерина А. → Ekaterina, quota: 2000
+2025-10-09 12:30:13,931 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:30:13,932 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 27
+2025-10-09 12:30:14,125 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:14,126 - __main__ - INFO - Processamento pagamento: Татьяна В. - 1000/1000RUB disponibile del 2025-09-30
+2025-10-09 12:30:14,126 - __main__ - INFO - ✅ Associazione esistente trovata: Татьяна В. → Tatiana
+2025-10-09 12:30:14,126 - __main__ - INFO - Trovate 2 lezioni nel range ±3 giorni
+2025-10-09 12:30:14,307 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:23,209 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:33,333 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:40,050 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:40,655 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:30:40,668 - __main__ - INFO - Pagamento 27 marcato come skipped
+2025-10-09 12:30:40,668 - __main__ - INFO - ⏭️ Pagamento saltato e marcato: Татьяна В. - 1000
+2025-10-09 12:30:40,803 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:30:40,804 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 28
+2025-10-09 12:30:41,020 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:41,023 - __main__ - INFO - Processamento pagamento: Анелия Т. - 2000/2000RUB disponibile del 2025-09-30
+2025-10-09 12:30:41,024 - __main__ - INFO - ✅ Associazione esistente trovata: Анелия Т. → Anelia
+2025-10-09 12:30:41,025 - __main__ - INFO - Trovate 2 lezioni nel range ±3 giorni
+2025-10-09 12:30:41,185 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:50,174 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:52,419 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:30:52,909 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:30:52,911 - __main__ - WARNING - ⚠️  Associazione già esistente: Анелия Т. → Anelia
+2025-10-09 12:30:52,926 - __main__ - INFO - ✅ Pagamento-lezione associato: Анелия Т. → Anelia, quota: 2000
+2025-10-09 12:30:53,068 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:30:53,070 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 29
+2025-10-09 12:30:53,219 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:30:53,220 - __main__ - INFO - Processamento pagamento: Галина Х. - 1500/1500RUB disponibile del 2025-09-29
+2025-10-09 12:30:53,221 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:30:53,392 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:31:02,557 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:12,706 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:15,615 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:16,236 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-10-09 12:31:16,248 - __main__ - INFO - ✅ Associazione salvata: Галина Х. → Valentina (auto: False, score: 0.0%)
+2025-10-09 12:31:16,260 - __main__ - INFO - ✅ Pagamento-lezione associato: Галина Х. → Valentina, quota: 1500
+2025-10-09 12:31:16,419 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/editMessageText "HTTP/1.1 200 OK"
+2025-10-09 12:31:16,420 - __main__ - INFO - ▶️ Auto-processamento prossimo pagamento: ID 30
+2025-10-09 12:31:16,609 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:31:16,610 - __main__ - INFO - Processamento pagamento: Николай Ш. - 2000/2000RUB disponibile del 2025-09-28
+2025-10-09 12:31:16,611 - __main__ - INFO - Trovate 19 lezioni nel range ±3 giorni
+2025-10-09 12:31:16,840 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/sendMessage "HTTP/1.1 200 OK"
+2025-10-09 12:31:25,739 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:35,863 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:40,644 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7762615672:AAFK0-ZcJIN2f27ePQaxhsL-kfwZqaFWsJo/getUpdates "HTTP/1.1 200 OK"
+2025-10-09 12:31:40,645 - telegram.ext.Application - INFO - Application is stopping. This might take a moment.
+2025-10-09 12:31:40,646 - telegram.ext.Application - INFO - Application.stop() complete
+2025-10-09 13:31:59,139 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-10-09 13:32:00,695 - association_resolver - INFO - ✅ Sincronizzate 150 lezioni da Google Calendar

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Storico Pagamenti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .lesson-item { @apply border-l-4 border-green-500 bg-green-50; }
+        .payment-item { @apply border-l-4 border-green-500 bg-green-50; }
+        .abbinamento-item { @apply border-l-4 border-gray-400 bg-gray-100; }
+
+        .lesson-item:hover, .payment-item:hover { @apply bg-green-100; }
+
+        input[type="checkbox"]:checked + label {
+            @apply bg-blue-100 border-blue-500;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center">📊 Gestione Storico Pagamenti e Lezioni</h1>
+
+        <!-- Grid 2 colonne -->
+        <div class="grid grid-cols-2 gap-6 mb-6">
+            <!-- LEZIONI (Sinistra) -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">📚 LEZIONI NON PAGATE</h2>
+                    <div class="flex gap-2">
+                        <a href="?lesson_order=ASC&payment_order={{ payment_order }}"
+                           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+                            ↑ Data
+                        </a>
+                        <a href="?lesson_order=DESC&payment_order={{ payment_order }}"
+                           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+                            ↓ Data
+                        </a>
+                    </div>
+                </div>
+
+                <div class="space-y-2 max-h-96 overflow-y-auto" id="lessons-list">
+                    {% for lesson in lessons %}
+                    <div class="lesson-item p-3 rounded">
+                        <label class="flex items-start cursor-pointer">
+                            <input type="checkbox"
+                                   name="lessons[]"
+                                   value="{{ lesson.id }}"
+                                   class="mt-1 mr-3 w-5 h-5 lesson-checkbox"
+                                   onchange="updateTotals()">
+                            <div class="flex-1">
+                                <div class="font-semibold">{{ lesson.studente }}</div>
+                                <div class="text-sm text-gray-600">
+                                    📅 {{ lesson.giorno }} ⏰ {{ lesson.ora }}
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-500 text-center py-8">Nessuna lezione da pagare</p>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-4 p-3 bg-blue-50 rounded">
+                    <div class="font-semibold">Selezionate: <span id="lessons-count">0</span></div>
+                    <div class="text-sm text-gray-600">Totale debito: <span id="lessons-total">0</span> RUB</div>
+                </div>
+            </div>
+
+            <!-- PAGAMENTI (Destra) -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">💰 PAGAMENTI DISPONIBILI</h2>
+                    <div class="flex gap-2">
+                        <a href="?lesson_order={{ lesson_order }}&payment_order=ASC"
+                           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+                            ↑ Data
+                        </a>
+                        <a href="?lesson_order={{ lesson_order }}&payment_order=DESC"
+                           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+                            ↓ Data
+                        </a>
+                    </div>
+                </div>
+
+                <div class="space-y-2 max-h-96 overflow-y-auto" id="payments-list">
+                    {% for payment in payments %}
+                    <div class="payment-item p-3 rounded">
+                        <label class="flex items-start cursor-pointer">
+                            <input type="checkbox"
+                                   name="payments[]"
+                                   value="{{ payment.id }}"
+                                   data-residuo="{{ payment.residuo }}"
+                                   class="mt-1 mr-3 w-5 h-5 payment-checkbox"
+                                   onchange="updateTotals()">
+                            <div class="flex-1">
+                                <div class="font-semibold">{{ payment.nome_pagante }}</div>
+                                <div class="text-sm text-gray-600">
+                                    💵 {{ payment.residuo }} {{ payment.valuta }}
+                                    <span class="text-xs">(di {{ payment.somma }} totali)</span>
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    📅 {{ payment.giorno }} ⏰ {{ payment.ora }}
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-500 text-center py-8">Nessun pagamento disponibile</p>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-4 p-3 bg-green-50 rounded">
+                    <div class="font-semibold">Selezionati: <span id="payments-count">0</span></div>
+                    <div class="text-sm text-gray-600">Totale credito: <span id="payments-total">0</span> RUB</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conferma Abbinamento -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-center">
+                <form action="/abbina" method="POST" id="abbina-form" onsubmit="return validateSelection()">
+                    <!-- Hidden inputs per lezioni selezionate -->
+                    <div id="hidden-lessons"></div>
+                    <!-- Hidden inputs per pagamenti selezionati -->
+                    <div id="hidden-payments"></div>
+
+                    <button type="submit"
+                            id="confirm-btn"
+                            class="px-8 py-4 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            disabled>
+                        🔗 CONFERMA ABBINAMENTO
+                    </button>
+                </form>
+            </div>
+            <div id="error-msg" class="mt-2 text-red-600 text-sm text-center hidden"></div>
+        </div>
+
+        <!-- Abbinamenti Esistenti -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-bold mb-4">📊 ABBINAMENTI COMPLETATI</h2>
+
+            {% if abbinamenti %}
+            <div class="space-y-2">
+                {% for abb in abbinamenti %}
+                <div class="abbinamento-item p-3 rounded flex justify-between items-center">
+                    <div class="flex-1 grid grid-cols-2 gap-4">
+                        <div>
+                            <div class="font-semibold">Lezione:</div>
+                            <div class="text-sm">{{ abb.lezione }}</div>
+                        </div>
+                        <div>
+                            <div class="font-semibold">Pagamento:</div>
+                            <div class="text-sm">{{ abb.pagamento }} → {{ abb.quota }} {{ abb.valuta }}</div>
+                        </div>
+                    </div>
+                    <form action="/delete/{{ abb.id }}" method="POST"
+                          onsubmit="return confirm('Eliminare questo abbinamento?')">
+                        <button type="submit"
+                                class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">
+                            🗑️ Elimina
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nessun abbinamento esistente</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const COSTO_LEZIONE = 2000; // RUB per lezione (configurabile)
+
+        function updateTotals() {
+            // Conta lezioni selezionate
+            const lessonCheckboxes = document.querySelectorAll('.lesson-checkbox:checked');
+            const lessonCount = lessonCheckboxes.length;
+            const lessonTotal = lessonCount * COSTO_LEZIONE;
+
+            // Conta pagamenti selezionati e somma residuo
+            const paymentCheckboxes = document.querySelectorAll('.payment-checkbox:checked');
+            const paymentCount = paymentCheckboxes.length;
+            let paymentTotal = 0;
+
+            paymentCheckboxes.forEach(cb => {
+                paymentTotal += parseFloat(cb.dataset.residuo);
+            });
+
+            // Aggiorna UI
+            document.getElementById('lessons-count').textContent = lessonCount;
+            document.getElementById('lessons-total').textContent = lessonTotal;
+            document.getElementById('payments-count').textContent = paymentCount;
+            document.getElementById('payments-total').textContent = paymentTotal;
+
+            // Abilita/disabilita pulsante conferma
+            const confirmBtn = document.getElementById('confirm-btn');
+            const errorMsg = document.getElementById('error-msg');
+
+            if (lessonCount === 0 || paymentCount === 0) {
+                confirmBtn.disabled = true;
+                errorMsg.textContent = '';
+                errorMsg.classList.add('hidden');
+            } else {
+                confirmBtn.disabled = false;
+                errorMsg.textContent = '';
+                errorMsg.classList.add('hidden');
+            }
+
+            // Aggiorna hidden inputs per il form
+            updateHiddenInputs();
+        }
+
+        function updateHiddenInputs() {
+            // Lezioni
+            const hiddenLessons = document.getElementById('hidden-lessons');
+            hiddenLessons.innerHTML = '';
+            document.querySelectorAll('.lesson-checkbox:checked').forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'lessons[]';
+                input.value = cb.value;
+                hiddenLessons.appendChild(input);
+            });
+
+            // Pagamenti
+            const hiddenPayments = document.getElementById('hidden-payments');
+            hiddenPayments.innerHTML = '';
+            document.querySelectorAll('.payment-checkbox:checked').forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'payments[]';
+                input.value = cb.value;
+                hiddenPayments.appendChild(input);
+            });
+        }
+
+        function validateSelection() {
+            const lessonCount = document.querySelectorAll('.lesson-checkbox:checked').length;
+            const paymentCount = document.querySelectorAll('.payment-checkbox:checked').length;
+
+            if (lessonCount === 0 || paymentCount === 0) {
+                alert('Seleziona almeno una lezione e un pagamento!');
+                return false;
+            }
+
+            return confirm(`Confermi abbinamento di ${lessonCount} lezioni con ${paymentCount} pagamenti?`);
+        }
+
+        // Inizializza al caricamento
+        updateTotals();
+    </script>
+</body>
+</html>

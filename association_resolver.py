@@ -150,13 +150,14 @@ def get_lessons_by_date_range(payment_date):
         return []
 
 
-def sync_lessons_from_calendar(days_back=60, days_forward=30):
+def sync_lessons_from_calendar(days_back=60):
     """
     Sincronizza le lezioni da Google Calendar nel database.
+    IMPORTANTE: Legge SOLO lezioni dal passato fino a OGGI (incluso).
+    NON legge mai lezioni future.
 
     Args:
-        days_back: Giorni nel passato da sincronizzare
-        days_forward: Giorni nel futuro da sincronizzare
+        days_back: Giorni nel passato da sincronizzare (default 60)
 
     Returns:
         Numero di lezioni sincronizzate
@@ -167,9 +168,10 @@ def sync_lessons_from_calendar(days_back=60, days_forward=30):
     )
     service = build('calendar', 'v3', credentials=credentials)
 
-    # Range di date
-    time_min = (datetime.now() - timedelta(days=days_back)).isoformat() + 'Z'
-    time_max = (datetime.now() + timedelta(days=days_forward)).isoformat() + 'Z'
+    # Range di date: da days_back fa fino a OGGI (fine giornata)
+    now = datetime.now()
+    time_min = (now - timedelta(days=days_back)).isoformat() + 'Z'
+    time_max = now.replace(hour=23, minute=59, second=59).isoformat() + 'Z'
 
     try:
         events_result = service.events().list(
@@ -609,6 +611,7 @@ async def send_options(payment, match_result, bot):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Gestisce i callback dai bottoni inline.
+    Supporta selezione multipla per abbonamenti e quota_usata per lezioni condivise.
     """
     query = update.callback_query
     await query.answer()
@@ -626,30 +629,95 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     payment_data = pending_associations[payment_key]
     payment = payment_data['payment']
+    abbonamento_type = payment_data.get('abbonamento_type')
+    num_lezioni = payment_data.get('num_lezioni', 1)
+    selected_lessons = payment_data.get('selected_lessons', [])
 
     if action == "lesson":
-        # Selezione lezione → crea associazione studente-pagante
-        nome_studente = '_'.join(parts[2:])  # Gestisce nomi con underscore
+        # Selezione lezione
+        lezione_id = int(parts[2])
 
-        # Salva associazione
+        # Trova la lezione selezionata
+        lesson = next((l for l in payment_data['lessons'] if l['id'] == lezione_id), None)
+        if not lesson:
+            await query.answer("❌ Lezione non trovata", show_alert=True)
+            return
+
+        nome_studente = lesson['nome_studente']
+
+        # Salva o aggiorna associazione pagante→studente
         save_association(
             payment['nome_pagante'],
             nome_studente,
             auto_matched=False,
             confidence_score=0
         )
-        update_payment_status(payment_id, 'associato')
 
-        logger.info(f"✅ Associazione creata da selezione lezione: {payment['nome_pagante']} → {nome_studente}")
+        # Gestione abbonamenti (selezione multipla)
+        if abbonamento_type and num_lezioni > 1:
+            # Aggiungi lezione alla lista
+            if lezione_id not in selected_lessons:
+                selected_lessons.append(lezione_id)
+                payment_data['selected_lessons'] = selected_lessons
 
-        await query.edit_message_text(
-            f"✅ <b>Associazione salvata!</b>\n\n"
-            f"💰 Pagamento: {payment['somma']}{payment['valuta']}\n"
-            f"👤 Pagante: {payment['nome_pagante']}\n"
-            f"📚 Studente: <b>{nome_studente}</b>\n\n"
-            f"Questa associazione verrà riutilizzata per i futuri pagamenti da {payment['nome_pagante']}.",
-            parse_mode='HTML'
-        )
+            # Controlla se abbiamo selezionato abbastanza lezioni
+            if len(selected_lessons) < num_lezioni:
+                await query.answer(f"✅ Lezione aggiunta ({len(selected_lessons)}/{num_lezioni})")
+                # Non fare nulla, aspetta altre selezioni
+                return
+            else:
+                # Abbonamento completo, salva tutte le associazioni
+                quota_per_lezione = payment['residuo'] / num_lezioni
+
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+
+                for lid in selected_lessons:
+                    cursor.execute('''
+                        INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                        VALUES (?, ?, ?)
+                    ''', (payment_id, lid, quota_per_lezione))
+
+                conn.commit()
+                conn.close()
+
+                logger.info(f"✅ Abbonamento {abbonamento_type} associato: {num_lezioni} lezioni per {payment['nome_pagante']}")
+
+                await query.edit_message_text(
+                    f"✅ <b>Abbonamento {abbonamento_type} salvato!</b>\n\n"
+                    f"💰 Pagamento: {payment['somma']}{payment['valuta']}\n"
+                    f"👤 Pagante: {payment['nome_pagante']} → <b>{nome_studente}</b>\n"
+                    f"📚 {num_lezioni} lezioni associate ({quota_per_lezione:.0f} RUB ciascuna)\n\n"
+                    f"Questa associazione verrà riutilizzata per i futuri pagamenti.",
+                    parse_mode='HTML'
+                )
+        else:
+            # Pagamento singolo o ultima lezione abbonamento
+            # Chiedi quota_usata se non è un abbonamento
+            quota_usata = payment['residuo']  # Default: usa tutto il residuo
+
+            # Salva in pagamenti_lezioni
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                VALUES (?, ?, ?)
+            ''', (payment_id, lezione_id, quota_usata))
+
+            conn.commit()
+            conn.close()
+
+            logger.info(f"✅ Pagamento-lezione associato: {payment['nome_pagante']} → {nome_studente}, quota: {quota_usata}")
+
+            await query.edit_message_text(
+                f"✅ <b>Associazione salvata!</b>\n\n"
+                f"💰 Pagamento: {quota_usata}{payment['valuta']} (di {payment['somma']} totali)\n"
+                f"👤 Pagante: {payment['nome_pagante']} → <b>{nome_studente}</b>\n"
+                f"📚 Lezione: {lesson['giorno']} {lesson['ora']}\n\n"
+                f"Residuo: {payment['residuo'] - quota_usata}{payment['valuta']}",
+                parse_mode='HTML'
+            )
 
         del pending_associations[payment_key]
 
@@ -728,13 +796,88 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Errore auto-processamento prossimo: {e}")
 
+    elif action == "newpay":
+        # Gestione nuovi pagamenti notificati dal monitor
+        lezione_id = int(parts[2])
+
+        # Recupera dati pagamento e lezione dal DB
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT nome_pagante, giorno, ora, somma, valuta FROM pagamenti WHERE id_pagamento = ?', (payment_id,))
+        pay_row = cursor.fetchone()
+
+        cursor.execute('SELECT nome_studente, giorno, ora FROM lezioni WHERE id_lezione = ?', (lezione_id,))
+        les_row = cursor.fetchone()
+
+        if not pay_row or not les_row:
+            await query.edit_message_text("❌ Dati non trovati")
+            conn.close()
+            return
+
+        nome_pagante = pay_row[0]
+        nome_studente = les_row[0]
+        quota_usata = pay_row[3]  # Usa l'intero importo
+
+        # Salva associazione pagante→studente
+        save_association(nome_pagante, nome_studente, auto_matched=False, confidence_score=0)
+
+        # Salva in pagamenti_lezioni
+        cursor.execute('''
+            INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+            VALUES (?, ?, ?)
+        ''', (payment_id, lezione_id, quota_usata))
+
+        # Marca come associato
+        cursor.execute('UPDATE pagamenti SET stato = ? WHERE id_pagamento = ?', ('associato', payment_id))
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"✅ Nuovo pagamento associato: {nome_pagante} → {nome_studente}, {quota_usata} RUB")
+
+        await query.edit_message_text(
+            f"✅ <b>Pagamento associato!</b>\n\n"
+            f"💰 {quota_usata} RUB da {nome_pagante}\n"
+            f"📚 Lezione: {nome_studente} - {les_row[1]} {les_row[2]}\n\n"
+            f"Associazione salvata.",
+            parse_mode='HTML'
+        )
+
+    elif action == "archive":
+        # Archivia pagamento per gestione via web
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE pagamenti SET stato = ? WHERE id_pagamento = ?', ('archivio', payment_id))
+        cursor.execute('SELECT nome_pagante, somma, valuta FROM pagamenti WHERE id_pagamento = ?', (payment_id,))
+        row = cursor.fetchone()
+        conn.commit()
+        conn.close()
+
+        logger.info(f"📦 Pagamento archiviato: {row[0]} - {row[1]}")
+
+        await query.edit_message_text(
+            f"📦 <b>Pagamento archiviato</b>\n\n"
+            f"{row[0]} - {row[1]} {row[2]}\n\n"
+            f"Gestiscilo tramite interfaccia web.",
+            parse_mode='HTML'
+        )
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler per il comando /start."""
     await update.message.reply_text(
-        "🤖 Bot Associazioni Pagamenti-Studenti\n\n"
-        "Questo bot ti aiuta ad associare i pagamenti ricevuti agli studenti.\n"
-        "Usa /process per elaborare i pagamenti in sospeso."
+        "🤖 <b>Bot Associazioni Pagamenti-Studenti</b>\n\n"
+        "Comandi disponibili:\n"
+        "• /process - Processa pagamenti non associati\n"
+        "• /suspended - Riprocessa pagamenti saltati\n"
+        "• /sync - Sincronizza lezioni da Google Calendar\n\n"
+        "✨ <b>Funzionalità:</b>\n"
+        "• Rilevamento automatico abbonamenti (3/5/10 lezioni)\n"
+        "• Supporto pagamenti parziali per lezioni condivise\n"
+        "• Associazione pagante→studente riutilizzabile\n"
+        "• Calcolo automatico residuo disponibile",
+        parse_mode='HTML'
     )
 
 
@@ -827,6 +970,26 @@ async def suspended_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Errore: {e}")
 
 
+async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler per il comando /sync - sincronizza lezioni da Google Calendar."""
+    if not update.message:
+        return
+
+    await update.message.reply_text("🔄 Sincronizzazione lezioni da Google Calendar in corso...")
+
+    try:
+        synced = sync_lessons_from_calendar(days_back=60)
+        await update.message.reply_text(
+            f"✅ <b>Sincronizzazione completata!</b>\n\n"
+            f"📚 {synced} lezioni sincronizzate dal calendario.\n"
+            f"Range: ultimi 60 giorni fino a OGGI (incluso)",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"❌ Errore sincronizzazione lezioni: {e}")
+        await update.message.reply_text(f"❌ Errore durante la sincronizzazione: {e}")
+
+
 def main():
     """Funzione principale."""
     if not BOT_TOKEN:
@@ -845,6 +1008,11 @@ def main():
     print(f"Admin Chat ID: {ADMIN_CHAT_ID}")
     print("="*60 + "\n")
 
+    # Sincronizza lezioni all'avvio
+    print("🔄 Sincronizzazione lezioni da Google Calendar...")
+    synced = sync_lessons_from_calendar(days_back=60)
+    print(f"✅ {synced} lezioni sincronizzate (ultimi 60 giorni fino a oggi)\n")
+
     # Crea l'applicazione
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -852,6 +1020,7 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("process", process_command))
     application.add_handler(CommandHandler("suspended", suspended_command))
+    application.add_handler(CommandHandler("sync", sync_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
 
     # Avvia il bot
