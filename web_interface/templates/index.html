@@ -6,14 +6,40 @@
     <title>Gestione Storico Pagamenti</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .lesson-item { @apply border-l-4 border-green-500 bg-green-50; }
-        .payment-item { @apply border-l-4 border-green-500 bg-green-50; }
+        /* Stile default: bordo verde, sfondo bianco */
+        .lesson-item { @apply border-l-4 border-green-500 bg-white; }
+        .payment-item { @apply border-l-4 border-green-500 bg-white; }
+
+        /* Stile quando già abbinato: bordo grigio scuro, sfondo grigio chiaro */
+        .lesson-item.abbinato { @apply border-gray-600 bg-gray-200; }
+        .payment-item.abbinato { @apply border-blue-600 bg-blue-100; }
+
+        /* Stile quando selezionato (checkbox): bordo blu, sfondo blu chiaro */
+        .lesson-item.selected { @apply border-blue-500 bg-blue-50; }
+        .payment-item.selected { @apply border-blue-500 bg-blue-50; }
+
+        /* Abbinamenti completati */
         .abbinamento-item { @apply border-l-4 border-gray-400 bg-gray-100; }
 
-        .lesson-item:hover, .payment-item:hover { @apply bg-green-100; }
+        /* Hover */
+        .lesson-item:hover, .payment-item:hover {
+            @apply opacity-80;
+        }
 
-        input[type="checkbox"]:checked + label {
-            @apply bg-blue-100 border-blue-500;
+        /* Loading overlay */
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+        }
+
+        #loading-overlay.show {
+            display: flex;
         }
     </style>
 </head>
@@ -41,7 +67,7 @@
 
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="lessons-list">
                     {% for lesson in lessons %}
-                    <div class="lesson-item p-3 rounded">
+                    <div class="lesson-item p-3 rounded {% if lesson.is_abbinata %}abbinato{% endif %}">
                         <label class="flex items-start cursor-pointer">
                             <input type="checkbox"
                                    name="lessons[]"
@@ -52,6 +78,11 @@
                                 <div class="font-semibold">{{ lesson.studente }}</div>
                                 <div class="text-sm text-gray-600">
                                     📅 {{ lesson.giorno }} ⏰ {{ lesson.ora }}
+                                    {% if lesson.is_abbinata %}
+                                    <span class="ml-2 px-2 py-0.5 bg-gray-600 text-white text-xs rounded">
+                                        Abbinata ({{ lesson.quota_pagata }} RUB)
+                                    </span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </label>
@@ -85,7 +116,7 @@
 
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="payments-list">
                     {% for payment in payments %}
-                    <div class="payment-item p-3 rounded">
+                    <div class="payment-item p-3 rounded {% if payment.has_abbinamenti %}abbinato{% endif %}">
                         <label class="flex items-start cursor-pointer">
                             <input type="checkbox"
                                    name="payments[]"
@@ -98,6 +129,11 @@
                                 <div class="text-sm text-gray-600">
                                     💵 {{ payment.residuo }} {{ payment.valuta }}
                                     <span class="text-xs">(di {{ payment.somma }} totali)</span>
+                                    {% if payment.has_abbinamenti %}
+                                    <span class="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
+                                        Usato: {{ payment.quota_utilizzata }} RUB
+                                    </span>
+                                    {% endif %}
                                 </div>
                                 <div class="text-xs text-gray-500">
                                     📅 {{ payment.giorno }} ⏰ {{ payment.ora }}
@@ -120,7 +156,7 @@
         <!-- Conferma Abbinamento -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
             <div class="flex items-center justify-center">
-                <form action="/abbina" method="POST" id="abbina-form" onsubmit="return validateSelection()">
+                <form action="/abbina" method="POST" id="abbina-form" onsubmit="return validateAndSubmit(event)">
                     <!-- Hidden inputs per lezioni selezionate -->
                     <div id="hidden-lessons"></div>
                     <!-- Hidden inputs per pagamenti selezionati -->
@@ -135,6 +171,15 @@
                 </form>
             </div>
             <div id="error-msg" class="mt-2 text-red-600 text-sm text-center hidden"></div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="items-center justify-center">
+            <div class="bg-white rounded-lg p-8 shadow-2xl text-center">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-xl font-bold text-gray-700">Processing...</p>
+                <p class="text-sm text-gray-500 mt-2">Creazione abbinamenti in corso</p>
+            </div>
         </div>
 
         <!-- Abbinamenti Esistenti -->
@@ -209,8 +254,33 @@
                 errorMsg.classList.add('hidden');
             }
 
+            // Aggiorna stile visivo per elementi selezionati
+            updateVisualStyles();
+
             // Aggiorna hidden inputs per il form
             updateHiddenInputs();
+        }
+
+        function updateVisualStyles() {
+            // Aggiorna stile lezioni
+            document.querySelectorAll('.lesson-checkbox').forEach(cb => {
+                const lessonItem = cb.closest('.lesson-item');
+                if (cb.checked) {
+                    lessonItem.classList.add('selected');
+                } else {
+                    lessonItem.classList.remove('selected');
+                }
+            });
+
+            // Aggiorna stile pagamenti
+            document.querySelectorAll('.payment-checkbox').forEach(cb => {
+                const paymentItem = cb.closest('.payment-item');
+                if (cb.checked) {
+                    paymentItem.classList.add('selected');
+                } else {
+                    paymentItem.classList.remove('selected');
+                }
+            });
         }
 
         function updateHiddenInputs() {
@@ -237,16 +307,25 @@
             });
         }
 
-        function validateSelection() {
+        function validateAndSubmit(event) {
             const lessonCount = document.querySelectorAll('.lesson-checkbox:checked').length;
             const paymentCount = document.querySelectorAll('.payment-checkbox:checked').length;
 
             if (lessonCount === 0 || paymentCount === 0) {
                 alert('Seleziona almeno una lezione e un pagamento!');
+                event.preventDefault();
                 return false;
             }
 
-            return confirm(`Confermi abbinamento di ${lessonCount} lezioni con ${paymentCount} pagamenti?`);
+            if (!confirm(`Confermi abbinamento di ${lessonCount} lezioni con ${paymentCount} pagamenti?`)) {
+                event.preventDefault();
+                return false;
+            }
+
+            // Mostra loading overlay
+            document.getElementById('loading-overlay').classList.add('show');
+
+            return true;
         }
 
         // Inizializza al caricamento

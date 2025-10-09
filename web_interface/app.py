@@ -35,7 +35,8 @@ def get_unassigned_lessons(order='DESC'):
             l.giorno,
             l.ora,
             COALESCE(SUM(pl.quota_usata), 0) as quota_pagata,
-            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) > 0 THEN 1 ELSE 0 END as is_abbinata
+            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) > 0 THEN 1 ELSE 0 END as is_abbinata,
+            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) >= 2000 THEN 1 ELSE 0 END as is_completamente_pagata
         FROM lezioni l
         LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
         GROUP BY l.id_lezione
@@ -49,7 +50,9 @@ def get_unassigned_lessons(order='DESC'):
             'studente': row['nome_studente'],
             'giorno': row['giorno'],
             'ora': row['ora'],
-            'is_abbinata': row['is_abbinata']
+            'is_abbinata': row['is_abbinata'],
+            'quota_pagata': row['quota_pagata'],
+            'is_completamente_pagata': row['is_completamente_pagata']
         })
 
     conn.close()
@@ -75,7 +78,8 @@ def get_available_payments(order='DESC'):
             p.somma,
             p.valuta,
             COALESCE(SUM(pl.quota_usata), 0) as quota_utilizzata,
-            p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo
+            p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo,
+            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) > 0 THEN 1 ELSE 0 END as has_abbinamenti
         FROM pagamenti p
         LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
         WHERE p.stato IN ('sospeso', 'archivio')
@@ -93,7 +97,9 @@ def get_available_payments(order='DESC'):
             'ora': row['ora'],
             'somma': row['somma'],
             'valuta': row['valuta'],
-            'residuo': row['residuo']
+            'residuo': row['residuo'],
+            'quota_utilizzata': row['quota_utilizzata'],
+            'has_abbinamenti': row['has_abbinamenti']
         })
 
     conn.close()
