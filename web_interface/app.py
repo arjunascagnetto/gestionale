@@ -34,9 +34,11 @@ def get_unassigned_lessons(order='DESC'):
             l.nome_studente,
             l.giorno,
             l.ora,
+            l.costo,
+            l.gratis,
             COALESCE(SUM(pl.quota_usata), 0) as quota_pagata,
             CASE WHEN COALESCE(SUM(pl.quota_usata), 0) > 0 THEN 1 ELSE 0 END as is_abbinata,
-            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) >= 2000 THEN 1 ELSE 0 END as is_completamente_pagata
+            CASE WHEN COALESCE(SUM(pl.quota_usata), 0) >= l.costo THEN 1 ELSE 0 END as is_completamente_pagata
         FROM lezioni l
         LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
         GROUP BY l.id_lezione
@@ -50,6 +52,8 @@ def get_unassigned_lessons(order='DESC'):
             'studente': row['nome_studente'],
             'giorno': row['giorno'],
             'ora': row['ora'],
+            'costo': row['costo'],
+            'gratis': row['gratis'],
             'is_abbinata': row['is_abbinata'],
             'quota_pagata': row['quota_pagata'],
             'is_completamente_pagata': row['is_completamente_pagata']
@@ -144,11 +148,93 @@ def get_existing_abbinamenti():
     return abbinamenti
 
 
-def save_association(nome_pagante, nome_studente):
-    """Salva associazione pagante→studente (aggiorna se esiste già)."""
+def get_suggested_abbinamenti():
+    """
+    Genera suggerimenti intelligenti di abbinamento basati su:
+    1. Associazioni studente-pagante esistenti
+    2. Lezioni non ancora completamente pagate
+    3. Pagamenti con residuo disponibile
+    4. Vicinanza temporale (±7 giorni)
+
+    Returns:
+        Lista di suggerimenti con lezione_id, pagamento_id, e dati per visualizzazione
+    """
     conn = get_db()
     cursor = conn.cursor()
 
+    cursor.execute('''
+        SELECT
+            l.id_lezione,
+            l.nome_studente,
+            l.giorno as lez_giorno,
+            l.ora as lez_ora,
+            l.costo,
+            COALESCE(SUM(pl_existing.quota_usata), 0) as gia_pagato,
+            l.costo - COALESCE(SUM(pl_existing.quota_usata), 0) as da_pagare,
+            a.nome_pagante,
+            p.id_pagamento,
+            p.giorno as pag_giorno,
+            p.ora as pag_ora,
+            p.somma,
+            p.valuta,
+            p.somma - COALESCE(SUM(pl_residuo.quota_usata), 0) as residuo_pagamento,
+            ABS(JULIANDAY(l.giorno) - JULIANDAY(p.giorno)) as giorni_distanza
+        FROM lezioni l
+        -- Join con associazioni per trovare il pagante corrispondente
+        INNER JOIN associazioni a ON l.nome_studente = a.nome_studente
+        -- Join con pagamenti del pagante associato che hanno residuo
+        INNER JOIN pagamenti p ON a.nome_pagante = p.nome_pagante
+        -- Calcola quanto già pagato per questa lezione
+        LEFT JOIN pagamenti_lezioni pl_existing ON l.id_lezione = pl_existing.lezione_id
+        -- Calcola residuo del pagamento
+        LEFT JOIN pagamenti_lezioni pl_residuo ON p.id_pagamento = pl_residuo.pagamento_id
+        WHERE p.stato IN ('sospeso', 'archivio')
+            AND l.gratis = 0
+        GROUP BY l.id_lezione, p.id_pagamento
+        HAVING
+            da_pagare > 0
+            AND residuo_pagamento > 0
+            AND giorni_distanza <= 7
+        ORDER BY
+            giorni_distanza ASC,
+            l.giorno DESC
+        LIMIT 20
+    ''')
+
+    suggestions = []
+    for row in cursor.fetchall():
+        suggestions.append({
+            'lezione_id': row['id_lezione'],
+            'pagamento_id': row['id_pagamento'],
+            'studente': row['nome_studente'],
+            'lez_giorno': row['lez_giorno'],
+            'lez_ora': row['lez_ora'],
+            'costo': row['costo'],
+            'gia_pagato': row['gia_pagato'],
+            'da_pagare': row['da_pagare'],
+            'pagante': row['nome_pagante'],
+            'pag_giorno': row['pag_giorno'],
+            'pag_ora': row['pag_ora'],
+            'pag_somma': row['somma'],
+            'valuta': row['valuta'],
+            'residuo': row['residuo_pagamento'],
+            'giorni_distanza': int(row['giorni_distanza']),
+            'quota_suggerita': min(row['da_pagare'], row['residuo_pagamento'])
+        })
+
+    conn.close()
+    return suggestions
+
+
+def save_association(cursor, nome_pagante, nome_studente):
+    """
+    Salva associazione pagante→studente usando il cursor della transazione corrente.
+
+    Args:
+        cursor: Cursor della connessione DB attiva
+        nome_pagante: Nome del pagante
+        nome_studente: Nome dello studente
+    """
     try:
         # Usa INSERT OR REPLACE per aggiornare se lo studente ha già un'associazione
         cursor.execute('''
@@ -160,11 +246,9 @@ def save_association(nome_pagante, nome_studente):
                 valid_from = CURRENT_DATE,
                 updated_at = CURRENT_TIMESTAMP
         ''', (nome_studente, nome_pagante))
-        conn.commit()
     except Exception as e:
-        print(f"Errore salvataggio associazione: {e}")
-    finally:
-        conn.close()
+        # Log l'errore ma continua (non blocca la transazione principale)
+        print(f"⚠️ Errore salvataggio associazione {nome_studente} → {nome_pagante}: {e}")
 
 
 @app.route('/')
@@ -175,11 +259,13 @@ def index():
 
     lessons = get_unassigned_lessons(lesson_order)
     payments = get_available_payments(payment_order)
+    suggestions = get_suggested_abbinamenti()
     abbinamenti = get_existing_abbinamenti()
 
     return render_template('index.html',
                           lessons=lessons,
                           payments=payments,
+                          suggestions=suggestions,
                           abbinamenti=abbinamenti,
                           lesson_order=lesson_order,
                           payment_order=payment_order)
@@ -202,14 +288,10 @@ def abbina():
     cursor = conn.cursor()
 
     try:
-        # Calcola costo per lezione (assumiamo tutte le lezioni costano uguale)
-        # In futuro potresti aggiungere un campo 'costo' alla tabella lezioni
-        costo_per_lezione = 2000  # Default: 2000 RUB per lezione
-
         # Per ogni lezione, distribuisci i pagamenti
         for lesson_id in lesson_ids:
-            # Recupera studente
-            cursor.execute('SELECT nome_studente FROM lezioni WHERE id_lezione = ?', (lesson_id,))
+            # Recupera studente e costo specifico della lezione
+            cursor.execute('SELECT nome_studente, costo FROM lezioni WHERE id_lezione = ?', (lesson_id,))
             studente_row = cursor.fetchone()
 
             if not studente_row:
@@ -217,8 +299,9 @@ def abbina():
                 continue
 
             studente = studente_row['nome_studente']
+            costo_lezione = studente_row['costo'] or 2000  # Default se NULL
 
-            quota_residua = costo_per_lezione
+            quota_residua = costo_lezione
 
             for payment_id in payment_ids:
                 if quota_residua <= 0:
@@ -268,7 +351,7 @@ def abbina():
                     ''', (payment_id, lesson_id, quota_da_usare))
 
                 # Salva associazione studente-pagante (aggiorna se esiste)
-                save_association(nome_pagante, studente)
+                save_association(cursor, nome_pagante, studente)
 
                 quota_residua -= quota_da_usare
 
@@ -295,6 +378,138 @@ def abbina():
         conn.close()
 
     return redirect(url_for('index'))
+
+
+@app.route('/update_cost/<int:lesson_id>', methods=['POST'])
+def update_cost(lesson_id):
+    """Aggiorna il costo di una lezione."""
+    data = request.get_json()
+    new_cost = data.get('costo')
+
+    if new_cost is None or new_cost < 0:
+        return jsonify({'success': False, 'error': 'Costo non valido'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('UPDATE lezioni SET costo = ? WHERE id_lezione = ?', (new_cost, lesson_id))
+        conn.commit()
+        return jsonify({'success': True, 'costo': new_cost})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/confirm_suggestion', methods=['POST'])
+def confirm_suggestion():
+    """Conferma un suggerimento di abbinamento."""
+    data = request.get_json()
+    lezione_id = data.get('lezione_id')
+    pagamento_id = data.get('pagamento_id')
+    quota = data.get('quota')
+
+    if not lezione_id or not pagamento_id or not quota:
+        return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # Recupera nome studente e pagante per salvare associazione
+        cursor.execute('SELECT nome_studente FROM lezioni WHERE id_lezione = ?', (lezione_id,))
+        studente_row = cursor.fetchone()
+
+        cursor.execute('SELECT nome_pagante FROM pagamenti WHERE id_pagamento = ?', (pagamento_id,))
+        pagante_row = cursor.fetchone()
+
+        if not studente_row or not pagante_row:
+            return jsonify({'success': False, 'error': 'Lezione o pagamento non trovato'}), 404
+
+        studente = studente_row['nome_studente']
+        pagante = pagante_row['nome_pagante']
+
+        # Controlla se abbinamento esiste già
+        cursor.execute('''
+            SELECT id FROM pagamenti_lezioni
+            WHERE pagamento_id = ? AND lezione_id = ?
+        ''', (pagamento_id, lezione_id))
+
+        existing = cursor.fetchone()
+
+        if existing:
+            # Aggiorna quota esistente
+            cursor.execute('''
+                UPDATE pagamenti_lezioni
+                SET quota_usata = quota_usata + ?
+                WHERE id = ?
+            ''', (quota, existing['id']))
+        else:
+            # Inserisci nuovo abbinamento
+            cursor.execute('''
+                INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                VALUES (?, ?, ?)
+            ''', (pagamento_id, lezione_id, quota))
+
+        # Salva associazione studente-pagante
+        save_association(cursor, pagante, studente)
+
+        # Aggiorna stato pagamento se completamente usato
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'associato'
+            WHERE id_pagamento = ?
+            AND (SELECT p.somma - COALESCE(SUM(pl.quota_usata), 0)
+                 FROM pagamenti p
+                 LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+                 WHERE p.id_pagamento = ?) = 0
+        ''', (pagamento_id, pagamento_id))
+
+        conn.commit()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/reject_suggestion', methods=['POST'])
+def reject_suggestion():
+    """
+    Rifiuta un suggerimento (non fa nulla sul DB, solo rimuove dalla UI).
+    In futuro potremmo salvare i rifiuti per migliorare i suggerimenti.
+    """
+    data = request.get_json()
+    lezione_id = data.get('lezione_id')
+    pagamento_id = data.get('pagamento_id')
+
+    # Al momento non salviamo i rifiuti, solo confermiamo
+    # In futuro: salvare in una tabella 'suggerimenti_rifiutati'
+    return jsonify({'success': True, 'message': 'Suggerimento ignorato'})
+
+
+@app.route('/toggle_gratis/<int:lesson_id>', methods=['POST'])
+def toggle_gratis(lesson_id):
+    """Segna/desegna una lezione come gratis (lezione di prova)."""
+    data = request.get_json()
+    is_gratis = data.get('gratis', False)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('UPDATE lezioni SET gratis = ? WHERE id_lezione = ?', (1 if is_gratis else 0, lesson_id))
+        conn.commit()
+        return jsonify({'success': True, 'gratis': is_gratis})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/delete/<int:abbinamento_id>', methods=['POST'])

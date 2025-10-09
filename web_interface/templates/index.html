@@ -21,6 +21,9 @@
         /* Abbinamenti completati */
         .abbinamento-item { @apply border-l-4 border-gray-400 bg-gray-100; }
 
+        /* Suggerimenti */
+        .suggestion-item { @apply border-l-4 border-yellow-400 bg-yellow-50; }
+
         /* Hover */
         .lesson-item:hover, .payment-item:hover {
             @apply opacity-80;
@@ -67,15 +70,22 @@
 
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="lessons-list">
                     {% for lesson in lessons %}
-                    <div class="lesson-item p-3 rounded {% if lesson.is_abbinata %}abbinato{% endif %}">
+                    <div class="lesson-item p-3 rounded {% if lesson.is_abbinata %}abbinato{% endif %} {% if lesson.gratis %}opacity-60{% endif %}" data-lesson-id="{{ lesson.id }}">
                         <label class="flex items-start cursor-pointer">
                             <input type="checkbox"
                                    name="lessons[]"
                                    value="{{ lesson.id }}"
+                                   data-costo="{{ lesson.costo }}"
                                    class="mt-1 mr-3 w-5 h-5 lesson-checkbox"
-                                   onchange="updateTotals()">
+                                   onchange="updateTotals()"
+                                   {% if lesson.gratis %}disabled{% endif %}>
                             <div class="flex-1">
-                                <div class="font-semibold">{{ lesson.studente }}</div>
+                                <div class="font-semibold flex items-center gap-2">
+                                    {{ lesson.studente }}
+                                    {% if lesson.gratis %}
+                                    <span class="px-2 py-0.5 bg-purple-500 text-white text-xs rounded">🎁 GRATIS</span>
+                                    {% endif %}
+                                </div>
                                 <div class="text-sm text-gray-600">
                                     📅 {{ lesson.giorno }} ⏰ {{ lesson.ora }}
                                     {% if lesson.is_abbinata %}
@@ -83,6 +93,29 @@
                                         Abbinata ({{ lesson.quota_pagata }} RUB)
                                     </span>
                                     {% endif %}
+                                </div>
+                                <div class="text-sm mt-1 flex items-center gap-2">
+                                    <span class="text-gray-500">💵 Costo:</span>
+                                    <input type="number"
+                                           class="costo-input w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                                           value="{{ lesson.costo }}"
+                                           min="0"
+                                           step="100"
+                                           data-lesson-id="{{ lesson.id }}"
+                                           onchange="updateLessonCost(this, {{ lesson.id }})"
+                                           onclick="event.stopPropagation()"
+                                           {% if lesson.gratis %}disabled{% endif %}>
+                                    <span class="text-gray-500">RUB</span>
+                                    <span class="update-status-{{ lesson.id }} text-xs text-green-600 hidden">✓ Salvato</span>
+                                </div>
+                                <div class="text-sm mt-2 flex items-center gap-2">
+                                    <label class="flex items-center gap-1 cursor-pointer" onclick="event.stopPropagation()">
+                                        <input type="checkbox"
+                                               class="gratis-checkbox"
+                                               {% if lesson.gratis %}checked{% endif %}
+                                               onchange="toggleGratis(this, {{ lesson.id }})">
+                                        <span class="text-xs text-purple-600 font-medium">Lezione di prova (gratis)</span>
+                                    </label>
                                 </div>
                             </div>
                         </label>
@@ -182,6 +215,76 @@
             </div>
         </div>
 
+        <!-- Suggerimenti Intelligenti -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-2">💡 SUGGERIMENTI AUTOMATICI</h2>
+            <p class="text-sm text-gray-600 mb-4">Basati sulle associazioni studente-pagante esistenti e vicinanza temporale (±7 giorni)</p>
+
+            {% if suggestions %}
+            <div class="space-y-3" id="suggestions-container">
+                {% for sug in suggestions %}
+                <div class="suggestion-item p-4 rounded flex justify-between items-center"
+                     id="suggestion-{{ sug.lezione_id }}-{{ sug.pagamento_id }}">
+                    <div class="flex-1 grid grid-cols-3 gap-4">
+                        <div>
+                            <div class="font-semibold text-blue-700">📚 Lezione</div>
+                            <div class="text-sm font-medium">{{ sug.studente }}</div>
+                            <div class="text-xs text-gray-600">📅 {{ sug.lez_giorno }} ⏰ {{ sug.lez_ora }}</div>
+                            <div class="text-xs mt-1 flex items-center gap-1">
+                                <span class="text-gray-500">Costo:</span>
+                                <input type="number"
+                                       class="costo-suggestion-input w-20 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                       value="{{ sug.costo }}"
+                                       min="0"
+                                       step="100"
+                                       data-lesson-id="{{ sug.lezione_id }}"
+                                       data-payment-id="{{ sug.pagamento_id }}"
+                                       onchange="updateSuggestionCost(this, {{ sug.lezione_id }}, {{ sug.pagamento_id }}, {{ sug.gia_pagato }})"
+                                       onclick="event.stopPropagation()">
+                                <span class="text-gray-500">RUB</span>
+                                <span class="update-sug-status-{{ sug.lezione_id }}-{{ sug.pagamento_id }} text-xs text-green-600 hidden">✓</span>
+                                {% if sug.gia_pagato > 0 %}
+                                <span class="text-orange-600">(già: {{ sug.gia_pagato }})</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-green-700">💰 Pagamento</div>
+                            <div class="text-sm font-medium">{{ sug.pagante }}</div>
+                            <div class="text-xs text-gray-600">📅 {{ sug.pag_giorno }} ⏰ {{ sug.pag_ora }}</div>
+                            <div class="text-xs mt-1">
+                                <span class="text-gray-500">Residuo:</span> {{ sug.residuo }} {{ sug.valuta }}
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500 mb-1">Distanza temporale</div>
+                            <div class="text-2xl font-bold text-purple-600">{{ sug.giorni_distanza }}</div>
+                            <div class="text-xs text-gray-500">giorni</div>
+                            <div class="mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded font-semibold"
+                                 id="quota-display-{{ sug.lezione_id }}-{{ sug.pagamento_id }}"
+                                 data-quota="{{ sug.quota_suggerita }}">
+                                Quota: <span class="quota-value">{{ sug.quota_suggerita }}</span> RUB
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 ml-4">
+                        <button onclick="confirmSuggestionWithCurrentQuota({{ sug.lezione_id }}, {{ sug.pagamento_id }})"
+                                class="confirm-btn-{{ sug.lezione_id }}-{{ sug.pagamento_id }} px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 font-semibold">
+                            ✓ Conferma
+                        </button>
+                        <button onclick="rejectSuggestion({{ sug.lezione_id }}, {{ sug.pagamento_id }})"
+                                class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-semibold">
+                            ✗ Rifiuta
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nessun suggerimento disponibile al momento</p>
+            {% endif %}
+        </div>
+
         <!-- Abbinamenti Esistenti -->
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h2 class="text-xl font-bold mb-4">📊 ABBINAMENTI COMPLETATI</h2>
@@ -217,13 +320,95 @@
     </div>
 
     <script>
-        const COSTO_LEZIONE = 2000; // RUB per lezione (configurabile)
+        function toggleGratis(checkbox, lessonId) {
+            const isGratis = checkbox.checked;
+
+            if (!confirm(isGratis ?
+                'Segnare questa lezione come GRATIS (lezione di prova)? Non sarà più abbinabile a pagamenti.' :
+                'Rimuovere il flag GRATIS da questa lezione? Tornerà abbinabile ai pagamenti.')) {
+                checkbox.checked = !isGratis;
+                return;
+            }
+
+            fetch(`/toggle_gratis/${lessonId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ gratis: isGratis })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Ricarica la pagina per aggiornare l'interfaccia
+                    window.location.reload();
+                } else {
+                    alert('Errore durante l\'aggiornamento: ' + data.error);
+                    checkbox.checked = !isGratis;
+                }
+            })
+            .catch(error => {
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+                checkbox.checked = !isGratis;
+            });
+        }
+
+        function updateLessonCost(input, lessonId) {
+            const newCost = parseFloat(input.value);
+
+            if (isNaN(newCost) || newCost < 0) {
+                alert('Inserisci un costo valido!');
+                return;
+            }
+
+            // Aggiorna data-costo del checkbox corrispondente
+            const checkbox = document.querySelector(`.lesson-checkbox[value="${lessonId}"]`);
+            if (checkbox) {
+                checkbox.dataset.costo = newCost;
+            }
+
+            // Invia aggiornamento al server
+            fetch(`/update_cost/${lessonId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ costo: newCost })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mostra feedback visivo
+                    const statusSpan = document.querySelector(`.update-status-${lessonId}`);
+                    if (statusSpan) {
+                        statusSpan.classList.remove('hidden');
+                        setTimeout(() => {
+                            statusSpan.classList.add('hidden');
+                        }, 2000);
+                    }
+                    // Ricalcola totali se la lezione è selezionata
+                    updateTotals();
+                } else {
+                    alert('Errore durante l\'aggiornamento: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
+        }
 
         function updateTotals() {
-            // Conta lezioni selezionate
+            // Conta lezioni selezionate e somma i costi individuali
             const lessonCheckboxes = document.querySelectorAll('.lesson-checkbox:checked');
             const lessonCount = lessonCheckboxes.length;
-            const lessonTotal = lessonCount * COSTO_LEZIONE;
+            let lessonTotal = 0;
+
+            lessonCheckboxes.forEach(cb => {
+                const costo = parseFloat(cb.dataset.costo) || 2000;
+                lessonTotal += costo;
+            });
 
             // Conta pagamenti selezionati e somma residuo
             const paymentCheckboxes = document.querySelectorAll('.payment-checkbox:checked');
@@ -326,6 +511,160 @@
             document.getElementById('loading-overlay').classList.add('show');
 
             return true;
+        }
+
+        function updateSuggestionCost(input, lezioneId, pagamentoId, giaPagato) {
+            const newCost = parseFloat(input.value);
+
+            if (isNaN(newCost) || newCost < 0) {
+                alert('Inserisci un costo valido!');
+                return;
+            }
+
+            // Invia aggiornamento al server
+            fetch(`/update_cost/${lezioneId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ costo: newCost })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mostra feedback visivo
+                    const statusSpan = document.querySelector(`.update-sug-status-${lezioneId}-${pagamentoId}`);
+                    if (statusSpan) {
+                        statusSpan.classList.remove('hidden');
+                        setTimeout(() => {
+                            statusSpan.classList.add('hidden');
+                        }, 2000);
+                    }
+
+                    // Ricalcola la quota suggerita
+                    const nuovaQuota = Math.max(0, newCost - giaPagato);
+                    const quotaDisplay = document.getElementById(`quota-display-${lezioneId}-${pagamentoId}`);
+                    if (quotaDisplay) {
+                        quotaDisplay.dataset.quota = nuovaQuota;
+                        const quotaValue = quotaDisplay.querySelector('.quota-value');
+                        if (quotaValue) {
+                            quotaValue.textContent = nuovaQuota;
+                        }
+                    }
+                } else {
+                    alert('Errore durante l\'aggiornamento: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
+        }
+
+        function confirmSuggestionWithCurrentQuota(lezioneId, pagamentoId) {
+            // Leggi la quota attuale dal DOM (potrebbe essere stata modificata)
+            const quotaDisplay = document.getElementById(`quota-display-${lezioneId}-${pagamentoId}`);
+            const quota = quotaDisplay ? parseFloat(quotaDisplay.dataset.quota) : 0;
+
+            confirmSuggestion(lezioneId, pagamentoId, quota);
+        }
+
+        function confirmSuggestion(lezioneId, pagamentoId, quota) {
+            if (!confirm(`Confermare abbinamento di ${quota} RUB?`)) {
+                return;
+            }
+
+            // Mostra loading
+            document.getElementById('loading-overlay').classList.add('show');
+
+            fetch('/confirm_suggestion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    lezione_id: lezioneId,
+                    pagamento_id: pagamentoId,
+                    quota: quota
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading-overlay').classList.remove('show');
+
+                if (data.success) {
+                    // Rimuovi il suggerimento dalla UI
+                    const suggestionDiv = document.getElementById(`suggestion-${lezioneId}-${pagamentoId}`);
+                    if (suggestionDiv) {
+                        suggestionDiv.style.transition = 'opacity 0.3s';
+                        suggestionDiv.style.opacity = '0';
+                        setTimeout(() => {
+                            suggestionDiv.remove();
+
+                            // Se non ci sono più suggerimenti, mostra messaggio
+                            const container = document.getElementById('suggestions-container');
+                            if (container && container.children.length === 0) {
+                                container.innerHTML = '<p class="text-gray-500 text-center py-8">Nessun suggerimento disponibile al momento</p>';
+                            }
+                        }, 300);
+                    }
+
+                    // Ricarica la pagina dopo 1 secondo per aggiornare tutte le liste
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    alert('Errore durante la conferma: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading-overlay').classList.remove('show');
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
+        }
+
+        function rejectSuggestion(lezioneId, pagamentoId) {
+            if (!confirm('Rifiutare questo suggerimento? La lezione e il pagamento resteranno disponibili per abbinamenti manuali.')) {
+                return;
+            }
+
+            fetch('/reject_suggestion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    lezione_id: lezioneId,
+                    pagamento_id: pagamentoId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Rimuovi il suggerimento dalla UI
+                    const suggestionDiv = document.getElementById(`suggestion-${lezioneId}-${pagamentoId}`);
+                    if (suggestionDiv) {
+                        suggestionDiv.style.transition = 'opacity 0.3s';
+                        suggestionDiv.style.opacity = '0';
+                        setTimeout(() => {
+                            suggestionDiv.remove();
+
+                            // Se non ci sono più suggerimenti, mostra messaggio
+                            const container = document.getElementById('suggestions-container');
+                            if (container && container.children.length === 0) {
+                                container.innerHTML = '<p class="text-gray-500 text-center py-8">Nessun suggerimento disponibile al momento</p>';
+                            }
+                        }, 300);
+                    }
+                } else {
+                    alert('Errore durante il rifiuto: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
         }
 
         // Inizializza al caricamento

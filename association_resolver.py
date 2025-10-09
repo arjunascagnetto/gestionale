@@ -210,6 +210,8 @@ def sync_lessons_from_calendar(days_back=60):
             nome_studente = summary.replace('dmitry1', 'dmitry').strip()
 
             # Insert or update
+            # Nota: costo viene impostato a DEFAULT 2000 RUB dalla tabella
+            # Può essere modificato manualmente tramite interfaccia web
             try:
                 cursor.execute('''
                     INSERT INTO lezioni (nextcloud_event_id, nome_studente, giorno, ora, stato)
