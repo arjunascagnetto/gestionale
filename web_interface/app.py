@@ -139,14 +139,20 @@ def get_existing_abbinamenti():
 
 
 def save_association(nome_pagante, nome_studente):
-    """Salva associazione pagante→studente (se non esiste già)."""
+    """Salva associazione pagante→studente (aggiorna se esiste già)."""
     conn = get_db()
     cursor = conn.cursor()
 
     try:
+        # Usa INSERT OR REPLACE per aggiornare se lo studente ha già un'associazione
         cursor.execute('''
-            INSERT OR IGNORE INTO associazioni (nome_studente, nome_pagante, note)
-            VALUES (?, ?, 'Da interfaccia web')
+            INSERT INTO associazioni (nome_studente, nome_pagante, note, valid_from)
+            VALUES (?, ?, 'Da interfaccia web', CURRENT_DATE)
+            ON CONFLICT(nome_studente) DO UPDATE SET
+                nome_pagante = excluded.nome_pagante,
+                note = excluded.note,
+                valid_from = CURRENT_DATE,
+                updated_at = CURRENT_TIMESTAMP
         ''', (nome_studente, nome_pagante))
         conn.commit()
     except Exception as e:
@@ -189,69 +195,98 @@ def abbina():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Calcola costo per lezione (assumiamo tutte le lezioni costano uguale)
-    # In futuro potresti aggiungere un campo 'costo' alla tabella lezioni
-    costo_per_lezione = 2000  # Default: 2000 RUB per lezione
+    try:
+        # Calcola costo per lezione (assumiamo tutte le lezioni costano uguale)
+        # In futuro potresti aggiungere un campo 'costo' alla tabella lezioni
+        costo_per_lezione = 2000  # Default: 2000 RUB per lezione
 
-    # Per ogni lezione, distribuisci i pagamenti
-    for lesson_id in lesson_ids:
-        # Recupera studente
-        cursor.execute('SELECT nome_studente FROM lezioni WHERE id_lezione = ?', (lesson_id,))
-        studente = cursor.fetchone()['nome_studente']
+        # Per ogni lezione, distribuisci i pagamenti
+        for lesson_id in lesson_ids:
+            # Recupera studente
+            cursor.execute('SELECT nome_studente FROM lezioni WHERE id_lezione = ?', (lesson_id,))
+            studente_row = cursor.fetchone()
 
-        quota_residua = costo_per_lezione
-
-        for payment_id in payment_ids:
-            if quota_residua <= 0:
-                break
-
-            # Recupera residuo pagamento
-            cursor.execute('''
-                SELECT
-                    p.nome_pagante,
-                    p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo
-                FROM pagamenti p
-                LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
-                WHERE p.id_pagamento = ?
-                GROUP BY p.id_pagamento
-            ''', (payment_id,))
-
-            pay_row = cursor.fetchone()
-            if not pay_row:
+            if not studente_row:
+                print(f"Errore: Lezione {lesson_id} non trovata")
                 continue
 
-            residuo_pagamento = pay_row['residuo']
-            nome_pagante = pay_row['nome_pagante']
+            studente = studente_row['nome_studente']
 
-            # Calcola quanto usare di questo pagamento
-            quota_da_usare = min(quota_residua, residuo_pagamento)
+            quota_residua = costo_per_lezione
 
-            # Inserisci in pagamenti_lezioni
-            cursor.execute('''
-                INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
-                VALUES (?, ?, ?)
-            ''', (payment_id, lesson_id, quota_da_usare))
+            for payment_id in payment_ids:
+                if quota_residua <= 0:
+                    break
 
-            # Salva associazione studente-pagante
-            save_association(nome_pagante, studente)
+                # Recupera residuo pagamento
+                cursor.execute('''
+                    SELECT
+                        p.nome_pagante,
+                        p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo
+                    FROM pagamenti p
+                    LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+                    WHERE p.id_pagamento = ?
+                    GROUP BY p.id_pagamento
+                ''', (payment_id,))
 
-            quota_residua -= quota_da_usare
+                pay_row = cursor.fetchone()
+                if not pay_row or pay_row['residuo'] <= 0:
+                    continue
 
-    # Aggiorna stato pagamenti completamente usati
-    cursor.execute('''
-        UPDATE pagamenti
-        SET stato = 'associato'
-        WHERE id_pagamento IN (
-            SELECT p.id_pagamento
-            FROM pagamenti p
-            LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
-            GROUP BY p.id_pagamento
-            HAVING p.somma - COALESCE(SUM(pl.quota_usata), 0) = 0
-        )
-    ''')
+                residuo_pagamento = pay_row['residuo']
+                nome_pagante = pay_row['nome_pagante']
 
-    conn.commit()
-    conn.close()
+                # Calcola quanto usare di questo pagamento
+                quota_da_usare = min(quota_residua, residuo_pagamento)
+
+                # Controlla se abbinamento esiste già
+                cursor.execute('''
+                    SELECT id FROM pagamenti_lezioni
+                    WHERE pagamento_id = ? AND lezione_id = ?
+                ''', (payment_id, lesson_id))
+
+                existing = cursor.fetchone()
+
+                if existing:
+                    # Aggiorna quota esistente invece di inserire duplicato
+                    cursor.execute('''
+                        UPDATE pagamenti_lezioni
+                        SET quota_usata = quota_usata + ?
+                        WHERE id = ?
+                    ''', (quota_da_usare, existing['id']))
+                else:
+                    # Inserisci nuovo abbinamento
+                    cursor.execute('''
+                        INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                        VALUES (?, ?, ?)
+                    ''', (payment_id, lesson_id, quota_da_usare))
+
+                # Salva associazione studente-pagante (aggiorna se esiste)
+                save_association(nome_pagante, studente)
+
+                quota_residua -= quota_da_usare
+
+        # Aggiorna stato pagamenti completamente usati
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'associato'
+            WHERE id_pagamento IN (
+                SELECT p.id_pagamento
+                FROM pagamenti p
+                LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+                GROUP BY p.id_pagamento
+                HAVING p.somma - COALESCE(SUM(pl.quota_usata), 0) = 0
+            )
+        ''')
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Errore durante abbinamento: {e}")
+        # In produzione, usare flash message: flash(f'Errore: {e}', 'error')
+    finally:
+        conn.close()
 
     return redirect(url_for('index'))
 
