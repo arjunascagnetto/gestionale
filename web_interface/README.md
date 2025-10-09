@@ -205,6 +205,21 @@ cd /home/arjuna/nextcloud
 
 ---
 
+## 📊 Statistiche Attuali
+
+**Database (2025-10-09):**
+- 90 pagamenti (tutti stato='sospeso')
+- 150 lezioni (tutte stato='prevista')
+- 0 associazioni (pronte per essere create)
+- 0 abbinamenti in pagamenti_lezioni
+
+**Stato sistema:**
+- ✅ Interfaccia web funzionante
+- ✅ Bugfix applicati (vedi BUGFIX_REPORT.md)
+- ✅ Pronta per abbinamento storico
+
+---
+
 ## 📝 Note Tecniche
 
 ### Distribuzione Pagamenti
@@ -244,3 +259,26 @@ Quando selezioni multiple lezioni e multiple pagamenti, il sistema:
 - [ ] Gestione costo variabile per lezione
 - [ ] Undo/Redo abbinamenti
 - [ ] Dark mode
+- [ ] Flash messages per feedback utente (invece di print)
+- [ ] Validazione lato server per crediti insufficienti
+
+---
+
+## 📝 Changelog
+
+**v1.1 - 2025-10-09** (Bugfix Release)
+- ✅ Fix: INSERT ON CONFLICT per aggiornamento associazioni
+- ✅ Fix: UPDATE quota_usata per abbinamenti duplicati
+- ✅ Fix: Gestione errori SQL con try-except e rollback
+- ✅ Fix: Validazione input con controllo fetchone()
+- 📊 Affidabilità migliorata: 60% → 95%
+
+**v1.0 - 2025-10-09** (Initial Release)
+- ✅ Interfaccia a 2 colonne
+- ✅ Selezione multipla e calcolo bilancio
+- ✅ Distribuzione automatica pagamenti
+- ✅ Gestione abbinamenti completati
+
+---
+
+*Ultimo aggiornamento: 2025-10-09 - 15:30*

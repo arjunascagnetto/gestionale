@@ -1,20 +1,28 @@
 # TO-DO LIST PER IL PROGETTO DI GESTIONE PAGAMENTI
 
 ## ⚡ STATO ATTUALE DEL PROGETTO
-**Ultima modifica:** 2025-10-09
+**Ultima modifica:** 2025-10-09 (aggiornato)
 
-### Sistema Operativo
-- ✅ 90 pagamenti importati da Telegram
-- ✅ 20 studenti identificati
-- ✅ Bot Telegram attivo per associazioni interattive
-- ✅ Google Calendar integrato (calendario "Lezioni Russo")
-- ✅ Sistema skip/suspended per evitare loop
+### Sistema Operativo ✅
+- ✅ 90 pagamenti importati da Telegram (tutti in stato 'sospeso')
+- ✅ 150 lezioni sincronizzate da Google Calendar (stato 'prevista')
+- ✅ 20 studenti identificati e whitelist attiva
+- ✅ Bot Telegram attivo con comandi /process, /suspended, /sync
+- ✅ Sistema skip/suspended funzionante per evitare loop
+- ✅ Interfaccia Web completa e funzionante con bugfix applicati
+- ✅ Gestione abbonamenti (3/5/10 lezioni) e pagamenti parziali
 
-### Prossimi Passi
-- [ ] Testare workflow completo: /process → skip → /suspended
-- [ ] Continuare a processare i 90 pagamenti tramite bot
-- [ ] Implementare logica di associazione pagamenti-lezioni
-- [ ] Aggiungere gestione pagamenti multipli/parziali
+### Statistiche Database (aggiornate)
+- 📊 **Pagamenti**: 90 totali (tutti stato='sospeso', 0 abbinati ancora)
+- 📊 **Lezioni**: 150 totali (tutte stato='prevista')
+- 📊 **Associazioni**: 0 (pronte per essere create)
+- 📊 **Abbinamenti**: 0 in pagamenti_lezioni
+
+### Prossimi Passi Immediati
+- [ ] Avviare bot Telegram per processare i 90 pagamenti storici
+- [ ] Utilizzare interfaccia web per abbinamenti complessi
+- [ ] Verificare tutte le lezioni vengono correttamente abbinate
+- [ ] Testare workflow completo end-to-end con casi reali
 
 ---
 
@@ -52,17 +60,19 @@
 - [ ] Aggiungere logging su file
 - [ ] Creare unit test
 
-## Sviluppo componente 2: Sincronizzatore Lezioni (gcal_connect_test.py)
+## Sviluppo componente 2: Sincronizzatore Lezioni ✅
 - [x] Implementare connessione a Google Calendar per leggere il calendario "Lezioni Russo"
-- [x] Testare lettura eventi con date e orari
-- [ ] Sviluppare logica per estrarre nome_studente e dettagli lezione
-- [ ] Implementare inserimento/aggiornamento lezioni nel DB
-- [ ] Creare sistema di deduplicazione basato su event_id
-- [ ] Gestire eventi ricorrenti vs singoli
-- [ ] Aggiungere logging appropriato
+- [x] Testare lettura eventi con date e orari (gcal_connect_test.py)
+- [x] Sviluppare logica per estrarre nome_studente e dettagli lezione
+- [x] Implementare inserimento/aggiornamento lezioni nel DB (sync_lessons_from_calendar)
+- [x] Creare sistema di deduplicazione basato su event_id (nextcloud_event_id UNIQUE)
+- [x] Gestire eventi ricorrenti vs singoli (singleEvents=True)
+- [x] Filtraggio lezioni solo dal passato fino a oggi (no lezioni future)
+- [x] Aggiungere logging appropriato
+- [x] Integrato nel bot come comando /sync
 - [ ] Creare unit test
 
-## Sviluppo componente 3: Risolutore di Associazioni (association_resolver.py)
+## Sviluppo componente 3: Risolutore di Associazioni (association_resolver.py) ✅
 - [x] Implementare sistema di ricerca nelle associazioni esistenti
 - [x] Sviluppare logica per recuperare lezioni ±3 giorni dalla data pagamento
 - [x] Creare meccanismo per generare scelte multiple su Telegram (inline keyboard)
@@ -74,28 +84,43 @@
 - [x] Creare sistema skip/suspended per evitare loop
 - [x] Implementare comando /process per pagamenti non-skipped
 - [x] Implementare comando /suspended per pagamenti skipped
-- [x] Aggiungere logging su file (bot.log)
+- [x] Implementare comando /sync per sincronizzare lezioni da Calendar
+- [x] Aggiungere logging su file (association_resolver.log)
 - [x] Creare utility fuzzy matching (utils/name_matcher.py - attualmente non usato)
+- [x] Implementare rilevamento automatico abbonamenti (3/5/10 lezioni)
+- [x] Supporto pagamenti parziali per lezioni condivise
+- [x] Gestione quota_usata in tabella pagamenti_lezioni
 - [ ] Gestire validità temporale delle associazioni (valid_from, valid_to)
 - [ ] Creare unit test
 
-## Sviluppo componente 4: Associatore Pagamenti-Lezioni
-- [ ] Sviluppare logica per verificare associazioni e pagamenti disponibili
-- [ ] Implementare matching pagamenti con lezioni svolte
-- [ ] Creare sistema per gestire pagamenti parziali/multipli
-- [ ] Gestire pagamenti consumati/residui
-- [ ] Implementare aggiornamento stato lezioni (prevista -> svolta -> pagata)
-- [ ] Implementare aggiornamento stato pagamenti (sospeso -> associato -> usato)
-- [ ] Implementare gestione degli errori e mismatch
-- [ ] Sviluppare meccanismo di notifica su Telegram
-- [ ] Aggiungere logging appropriato
+## Sviluppo componente 4: Interfaccia Web Abbinamento Manuale ✅
+- [x] Creare interfaccia Flask (web_interface/app.py)
+- [x] Vista a 2 colonne: lezioni non pagate vs pagamenti disponibili
+- [x] Ordinamento indipendente per data crescente/decrescente
+- [x] Selezione multipla con checkbox
+- [x] Calcolo automatico bilancio crediti-debiti in real-time
+- [x] Pulsante CONFERMA ABBINAMENTO (attivo solo se bilancio ≥ 0)
+- [x] Distribuzione automatica pagamenti su lezioni multiple
+- [x] Gestione abbonamenti e pagamenti parziali
+- [x] Sezione ABBINAMENTI COMPLETATI con pulsante elimina
+- [x] Query calcolo residuo pagamenti (COALESCE SUM quota_usata)
+- [x] Aggiornamento automatico stato pagamenti
+- [x] Salvataggio associazioni studente-pagante
+- [x] Gestione errori SQL con try-except e rollback
+- [x] Bugfix: INSERT ON CONFLICT per update associazioni
+- [x] Bugfix: UPDATE quota_usata per abbinamenti esistenti
+- [x] Template HTML con Tailwind CSS
+- [ ] Aggiungere autenticazione con password
+- [ ] Implementare filtri per studente/data
 - [ ] Creare unit test
 
-## Struttura del Progetto
-- [ ] Organizzare il codice in moduli/package appropriati
-- [ ] Creare file di requirements.txt con le dipendenze
-- [ ] Impostare struttura di configurazione (config.py)
-- [ ] Creare script principali per ciascun componente
+## Struttura del Progetto ✅
+- [x] Organizzare il codice in moduli (telegram_ingestor, association_resolver, web_interface)
+- [x] Separare utility in cartella utils/ (name_matcher.py)
+- [x] File .env per configurazione credenziali
+- [x] File .gitignore per proteggere dati sensibili
+- [ ] Creare file requirements.txt consolidato con tutte le dipendenze
+- [ ] Documentare struttura cartelle in README principale
 
 ## Pianificazione ed Orchestrazione
 - [ ] Configurare scheduler per eseguire i componenti in sequenza

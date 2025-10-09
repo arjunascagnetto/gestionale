@@ -1,4 +1,59 @@
-.cal
-.env
-.vscode
+# Virtual Environment
+.cal/
+venv/
+env/
 
+# Environment variables and secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+
+# Telegram session files
+*.session
+*.session-journal
+
+# Google Service Account credentials
+*-electron-*.json
+service-account*.json
+credentials*.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# CSV data files (whitelist può rimanere)
+# mittenti_whitelist.csv - KEEP questo nel repo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp

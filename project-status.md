@@ -109,9 +109,9 @@ Sistema automatizzato per la gestione e riconciliazione dei pagamenti delle lezi
 - [x] Repository Git inizializzato
 - [x] File `.env` con credenziali configurate
 - [x] Database SQLite creato (`pagamenti.db`)
-- [x] Schema completo con indici e trigger
+- [x] Schema completo con indici, trigger e foreign keys
 
-#### 2. Componente 1: Ingestore Pagamenti
+#### 2. Componente 1: Ingestore Pagamenti ✅
 - [x] **Script**: `telegram_ingestor.py`
 - [x] Connessione Telethon User API
 - [x] Autenticazione completa (API_ID, API_HASH, phone, password, 2FA)
@@ -124,51 +124,87 @@ Sistema automatizzato per la gestione e riconciliazione dei pagamenti delle lezi
 - [x] Session file salvata (`telegram_session.session`)
 
 **Statistiche attuali:**
-- 90 pagamenti nel DB
-- 20 studenti validi
-- Totale: 184,800₽
+- **90 pagamenti** nel DB (tutti stato='sospeso')
+- **20 studenti** validi in whitelist
+- **Totale**: 184,800₽
 
-#### 3. Google Calendar Integration
+#### 3. Componente 2: Sincronizzatore Lezioni ✅
+- [x] Funzione `sync_lessons_from_calendar()` in `association_resolver.py`
+- [x] Lettura eventi da Google Calendar
+- [x] Estrazione nome studente dal titolo evento
+- [x] Inserimento/aggiornamento lezioni nel DB
+- [x] Deduplicazione via `nextcloud_event_id` (UNIQUE)
+- [x] Gestione eventi ricorrenti (singleEvents=True)
+- [x] Filtraggio solo lezioni passate (fino a oggi, no futuro)
+- [x] Integrato come comando `/sync` nel bot
+
+**Statistiche attuali:**
+- **150 lezioni** sincronizzate (tutte stato='prevista')
+- Range: ultimi 60 giorni fino a oggi
+
+#### 4. Componente 3: Risolutore Associazioni ✅
+- [x] **Script**: `association_resolver.py` (~1035 righe)
+- [x] Bot Telegram interattivo con comandi
+- [x] `/process` - Processa pagamenti non-skipped
+- [x] `/suspended` - Riprocessa pagamenti saltati
+- [x] `/sync` - Sincronizza lezioni da Google Calendar
+- [x] Inline keyboard per selezione lezioni
+- [x] Callback handlers per gestione risposte utente
+- [x] Sistema skip/suspended per evitare loop
+- [x] Auto-avanzamento al prossimo pagamento
+- [x] Salvataggio associazioni studente-pagante
+- [x] Riuso automatico associazioni esistenti
+- [x] Rilevamento automatico abbonamenti (3/5/10 lezioni)
+- [x] Supporto pagamenti parziali per lezioni condivise
+- [x] Logging su file (`association_resolver.log`)
+- [x] Ricerca lezioni ±3 giorni dalla data pagamento
+
+#### 5. Componente 4: Interfaccia Web ✅
+- [x] **App Flask**: `web_interface/app.py`
+- [x] Vista a 2 colonne (lezioni | pagamenti)
+- [x] Ordinamento indipendente per data
+- [x] Selezione multipla con checkbox
+- [x] Calcolo real-time bilancio crediti-debiti
+- [x] Pulsante CONFERMA ABBINAMENTO (con validazione)
+- [x] Distribuzione automatica su pagamenti multipli
+- [x] Gestione abbinamenti e pagamenti parziali
+- [x] Sezione ABBINAMENTI COMPLETATI
+- [x] Pulsante elimina con ripristino stato
+- [x] Query calcolo residuo pagamenti
+- [x] Aggiornamento automatico stato pagamenti
+- [x] Gestione errori SQL con rollback
+- [x] Template HTML con Tailwind CSS
+- [x] Bugfix applicati (vedi `BUGFIX_REPORT.md`)
+
+#### 6. Google Calendar Integration ✅
 - [x] Service Account creato su Google Cloud Console
 - [x] API Google Calendar abilitata
 - [x] Credenziali JSON scaricate (`fresh-electron-318314-050d19bd162e.json`)
 - [x] Calendario "Lezioni Russo" condiviso con service account
 - [x] **Script di test**: `gcal_connect_test.py`
-- [x] Accesso verificato, 50+ eventi letti
+- [x] Accesso verificato e funzionante
 - [x] Timezone: Europe/Moscow
 
 ---
 
 ### 🚧 In Corso / Da Completare
 
-#### Componente 2: Sincronizzatore Lezioni
-- [ ] Creare script per leggere eventi da Google Calendar
-- [ ] Estrarre nome studente dal titolo evento
-- [ ] Inserire/aggiornare lezioni nel DB
-- [ ] Gestire deduplicazione via `nextcloud_event_id`
-- [ ] Gestire eventi ricorrenti
+#### Attività Immediate
+- [ ] Processare i 90 pagamenti storici tramite bot o interfaccia web
+- [ ] Creare associazioni studente-pagante per i 20 studenti
+- [ ] Abbinare pagamenti alle 150 lezioni sincronizzate
 
-#### Componente 3: Risolutore Associazioni
-- [ ] Logica di matching automatico nomi
-- [ ] Interfaccia Telegram per conferma associazioni
-- [ ] Sistema di inline keyboard
-- [ ] Callback handlers
-- [ ] Salvataggio associazioni nel DB
-
-#### Componente 4: Associatore Pagamenti-Lezioni
-- [ ] Algoritmo di matching pagamenti ↔ lezioni
-- [ ] Gestione pagamenti parziali/multipli
-- [ ] Aggiornamento stati (pagamenti e lezioni)
-- [ ] Notifiche Telegram per discrepanze
-- [ ] Report periodici via Telegram
-
-#### Infrastruttura
-- [ ] Logging strutturato per tutti i componenti
-- [ ] Unit tests
+#### Infrastruttura e Miglioramenti
+- [ ] Logging strutturato per telegram_ingestor
+- [ ] Unit tests per tutti i componenti
 - [ ] Script di orchestrazione (esecuzione in sequenza)
-- [ ] Scheduler automatico (cron/systemd)
+- [ ] Scheduler automatico (cron/systemd per deployment)
 - [ ] Backup automatico database
-- [ ] Gestione errori e retry
+- [ ] Autenticazione interfaccia web
+- [ ] Filtri per studente/data nell'interfaccia web
+- [ ] Gestione validità temporale associazioni (valid_from, valid_to)
+- [ ] File requirements.txt consolidato
+- [ ] Documentazione diagrammi di flusso aggiornati
 
 ---
 
@@ -178,24 +214,39 @@ Sistema automatizzato per la gestione e riconciliazione dei pagamenti delle lezi
 /home/arjuna/nextcloud/
 ├── .env                                    # Credenziali (gitignored)
 ├── .gitignore
-├── to-do-list.txt                          # Task list dettagliata
-├── project-status.md                       # Questo file
+├── to-do-list.txt                          # Task list dettagliata (AGGIORNATA)
+├── project-status.md                       # Questo file (AGGIORNATO)
 │
-├── pagamenti.db                            # Database SQLite
+├── pagamenti.db                            # Database SQLite (90 pagamenti, 150 lezioni)
 ├── telegram_session.session                # Session Telegram salvata
+├── association_resolver.log                # Log del bot Telegram
 │
-├── mittenti_whitelist.csv                  # Whitelist studenti
+├── mittenti_whitelist.csv                  # Whitelist studenti (20 studenti)
 ├── fresh-electron-318314-*.json            # Credenziali Google Service Account
 │
 ├── db_create_schema.py                     # Schema DB + setup
 ├── db_connect_test.py                      # Test connessione DB
 │
 ├── telegram_ingestor.py                    # ✅ Componente 1 - Ingestore Pagamenti
+├── association_resolver.py                 # ✅ Componente 3 - Bot Telegram (1035 righe)
+├── payment_monitor.py                      # Monitor pagamenti in tempo reale
+├── test_bot.py                             # Test bot Telegram
+│
 ├── get_channel_id.py                       # Utility per ID canale Telegram
 ├── get_channel_id_forward.py               # Utility alternativa
 │
 ├── gcal_connect_test.py                    # ✅ Test Google Calendar
 ├── nextcloud_connect_test.py               # Test vecchio (Nextcloud, deprecato)
+│
+├── web_interface/                          # ✅ Interfaccia Web Flask
+│   ├── app.py                              # App Flask principale
+│   ├── templates/
+│   │   └── index.html                      # Template HTML
+│   ├── README.md                           # Documentazione web interface
+│   └── BUGFIX_REPORT.md                    # Report correzioni bug
+│
+├── utils/                                  # Utility e helper functions
+│   └── name_matcher.py                     # Fuzzy matching nomi (non usato ancora)
 │
 └── .cal/                                   # Virtual environment Python
     ├── bin/
@@ -245,22 +296,39 @@ NC_PASS=gGPFk-fBHbm-p6tc2-bw6GF-HfmzQ
 
 ## 🎯 Prossimi Passi Prioritari
 
-1. **Completare Componente 2**: Sincronizzatore Lezioni
-   - Creare `gcal_lesson_sync.py`
-   - Leggere eventi da Google Calendar
-   - Inserire nel DB tabella `lezioni`
+### Fase 1: Abbinamento Storico (IN CORSO)
+1. **Processare pagamenti storici**
+   - Opzione A: Usare bot Telegram (`/process`) per abbinamenti interattivi
+   - Opzione B: Usare interfaccia web per abbinamenti batch
+   - Creare le 0→20+ associazioni studente-pagante
 
-2. **Implementare Matching Nomi**
-   - Logica fuzzy matching tra nome_studente e nome_pagante
-   - Gestire variazioni (es. "Ekaterina" vs "Екатерина А.")
+2. **Completare abbinamenti**
+   - Abbinare i 90 pagamenti alle 150 lezioni
+   - Verificare che tutti i pagamenti siano allocati correttamente
+   - Controllare residui e crediti
 
-3. **Bot Telegram per Associazioni**
-   - Creare bot interattivo per confermare associazioni
-   - Inline keyboard con opzioni multiple
+### Fase 2: Testing e Validazione
+3. **Test end-to-end**
+   - Verificare workflow completo: ingestion → sync → abbinamento
+   - Testare casi edge (abbonamenti, lezioni condivise, pagamenti parziali)
+   - Controllare integrità dati nel database
 
-4. **Orchestrazione**
-   - Script master che esegue i componenti in sequenza
-   - Gestione errori e logging
+4. **Monitoraggio in produzione**
+   - Attivare `payment_monitor.py` per nuovi pagamenti
+   - Testare notifiche in tempo reale
+   - Verificare sincronizzazione automatica
+
+### Fase 3: Automazione (FUTURO)
+5. **Orchestrazione**
+   - Script master per esecuzione in sequenza
+   - Scheduler automatico (cron/systemd)
+   - Gestione errori e retry
+
+6. **Miglioramenti**
+   - Autenticazione web interface
+   - Filtri avanzati per ricerca
+   - Dashboard statistiche
+   - Export CSV/Excel
 
 ---
 
@@ -304,13 +372,18 @@ r'СЧЁТ\d+\s+(\d{1,2}):(\d{2})\s+Перевод.*?([\d\s]+)р\s+от\s+([А-�
 
 ## 📈 Metriche Progetto
 
-- **Linee di codice**: ~800 (python)
-- **Tabelle database**: 4
-- **Script funzionanti**: 3
-- **Test eseguiti**: 5+
-- **Pagamenti tracciati**: 90
-- **Studenti attivi**: 20
-- **Eventi calendario**: 50+
+- **Linee di codice**: ~2733 (python totale)
+  - telegram_ingestor.py: ~250 righe
+  - association_resolver.py: ~1035 righe
+  - web_interface/app.py: ~260 righe
+  - Altri script: ~1200 righe
+- **Tabelle database**: 4 (pagamenti, lezioni, associazioni, pagamenti_lezioni)
+- **Script funzionanti**: 8+ (ingestor, bot, web, tests, utilities)
+- **Test eseguiti**: 10+
+- **Pagamenti tracciati**: 90 (tutti in stato 'sospeso')
+- **Lezioni sincronizzate**: 150 (tutte in stato 'prevista')
+- **Studenti attivi**: 20 (in whitelist)
+- **Abbinamenti**: 0 (pronti per essere creati)
 
 ---
 
@@ -343,4 +416,25 @@ Questo account ha accesso al calendario "Lezioni Russo" e può leggere/modificar
 
 ---
 
-*Ultimo aggiornamento: 2025-10-09*
+---
+
+## 📝 Note di Versione
+
+**v2.0 - 2025-10-09** (MAJOR UPDATE)
+- ✅ Completato bot Telegram interattivo con 3 comandi
+- ✅ Completata interfaccia web Flask
+- ✅ Sincronizzatore lezioni integrato
+- ✅ 150 lezioni sincronizzate da Google Calendar
+- ✅ Sistema abbonamenti e pagamenti parziali
+- ✅ Bugfix applicati all'interfaccia web
+- 📊 Database: 90 pagamenti + 150 lezioni pronti per abbinamento
+
+**v1.0 - 2025-08-25** (Initial Release)
+- ✅ Ingestore pagamenti da Telegram
+- ✅ Schema database completo
+- ✅ 90 pagamenti storici importati
+- ✅ Integrazione Google Calendar testata
+
+---
+
+*Ultimo aggiornamento: 2025-10-09 - 15:30*
