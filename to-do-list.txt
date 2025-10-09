@@ -1,10 +1,31 @@
 # TO-DO LIST PER IL PROGETTO DI GESTIONE PAGAMENTI
 
+## ⚡ STATO ATTUALE DEL PROGETTO
+**Ultima modifica:** 2025-10-09
+
+### Sistema Operativo
+- ✅ 90 pagamenti importati da Telegram
+- ✅ 20 studenti identificati
+- ✅ Bot Telegram attivo per associazioni interattive
+- ✅ Google Calendar integrato (calendario "Lezioni Russo")
+- ✅ Sistema skip/suspended per evitare loop
+
+### Prossimi Passi
+- [ ] Testare workflow completo: /process → skip → /suspended
+- [ ] Continuare a processare i 90 pagamenti tramite bot
+- [ ] Implementare logica di associazione pagamenti-lezioni
+- [ ] Aggiungere gestione pagamenti multipli/parziali
+
+---
+
 ## Configurazione e Setup iniziale
 - [x] Creare l'ambiente di sviluppo (Python venv in .cal)
 - [x] Impostare un sistema di controllo versione (Git)
 - [x] Configurare l'accesso all'API di Telegram Bot (token in .env)
-- [x] Configurare l'accesso al calendario Nextcloud (credenziali in .env, test in nextcloud_connect_test.py)
+- [x] Configurare l'accesso a Google Calendar tramite Service Account
+- [x] Creare Service Account su Google Cloud Console
+- [x] Condividere calendario "Lezioni Russo" con service account
+- [x] Testare accesso e lettura eventi (gcal_connect_test.py)
 - [x] Progettare e creare lo schema del database
 
 ## Implementazione Database
@@ -15,8 +36,9 @@
 - [x] Creare tabella 'pagamenti_lezioni'
 - [x] Configurare indici appropriati
 - [x] Creare script di inizializzazione/migrazione DB (db_create_schema.py)
+- [x] Aggiungere colonna 'skipped' a tabella pagamenti (per gestire loop)
 
-## Sviluppo componente 1: Ingestore Pagamenti
+## Sviluppo componente 1: Ingestore Pagamenti (telegram_ingestor.py)
 - [x] Implementare connessione API Telegram (Telethon User API)
 - [x] Configurare autenticazione Telegram (API_ID, API_HASH, phone, password)
 - [x] Sviluppare logica di parsing dei messaggi da Telegram (regex per SMS banca russa)
@@ -26,24 +48,44 @@
 - [x] Creare whitelist mittenti validi (mittenti_whitelist.csv)
 - [x] Implementare filtro per escludere pagamenti da non-studenti
 - [x] Gestire parsing importi con spazi (es. "10 000")
-- [ ] Aggiungere logging appropriato
+- [x] Aggiungere logging su console
+- [ ] Aggiungere logging su file
 - [ ] Creare unit test
 
-## Sviluppo componente 2: Risolutore di Associazioni
-- [ ] Implementare connessione a Nextcloud per leggere il calendario "lezioni"
+## Sviluppo componente 2: Sincronizzatore Lezioni (gcal_connect_test.py)
+- [x] Implementare connessione a Google Calendar per leggere il calendario "Lezioni Russo"
+- [x] Testare lettura eventi con date e orari
 - [ ] Sviluppare logica per estrarre nome_studente e dettagli lezione
-- [ ] Implementare sistema di ricerca nelle associazioni esistenti
-- [ ] Creare meccanismo per generare scelte multiple su Telegram (inline keyboard)
-- [ ] Implementare callback handler per le selezioni utente
-- [ ] Sviluppare logica per aggiornare associazioni e pagamenti
+- [ ] Implementare inserimento/aggiornamento lezioni nel DB
+- [ ] Creare sistema di deduplicazione basato su event_id
+- [ ] Gestire eventi ricorrenti vs singoli
 - [ ] Aggiungere logging appropriato
 - [ ] Creare unit test
 
-## Sviluppo componente 3: Sincronizzatore Calendari
-- [ ] Estendere il codice di nextcloud_connect_test.py per accedere al calendario "lezioni"
+## Sviluppo componente 3: Risolutore di Associazioni (association_resolver.py)
+- [x] Implementare sistema di ricerca nelle associazioni esistenti
+- [x] Sviluppare logica per recuperare lezioni ±3 giorni dalla data pagamento
+- [x] Creare meccanismo per generare scelte multiple su Telegram (inline keyboard)
+- [x] Implementare callback handler per le selezioni utente
+- [x] Sviluppare logica per salvare associazioni studente-pagante
+- [x] Implementare riuso automatico delle associazioni esistenti
+- [x] Implementare processing sequenziale (un pagamento alla volta)
+- [x] Implementare auto-avanzamento al prossimo pagamento dopo azione utente
+- [x] Creare sistema skip/suspended per evitare loop
+- [x] Implementare comando /process per pagamenti non-skipped
+- [x] Implementare comando /suspended per pagamenti skipped
+- [x] Aggiungere logging su file (bot.log)
+- [x] Creare utility fuzzy matching (utils/name_matcher.py - attualmente non usato)
+- [ ] Gestire validità temporale delle associazioni (valid_from, valid_to)
+- [ ] Creare unit test
+
+## Sviluppo componente 4: Associatore Pagamenti-Lezioni
 - [ ] Sviluppare logica per verificare associazioni e pagamenti disponibili
-- [ ] Implementare spostamento o copia+chiusura degli eventi nel calendario "pagate"
-- [ ] Creare sistema per gestire pagamenti consumati/residui
+- [ ] Implementare matching pagamenti con lezioni svolte
+- [ ] Creare sistema per gestire pagamenti parziali/multipli
+- [ ] Gestire pagamenti consumati/residui
+- [ ] Implementare aggiornamento stato lezioni (prevista -> svolta -> pagata)
+- [ ] Implementare aggiornamento stato pagamenti (sospeso -> associato -> usato)
 - [ ] Implementare gestione degli errori e mismatch
 - [ ] Sviluppare meccanismo di notifica su Telegram
 - [ ] Aggiungere logging appropriato
