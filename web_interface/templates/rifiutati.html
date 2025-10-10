@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abbinamenti Rifiutati</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">🚫 Abbinamenti Rifiutati</h1>
+            <a href="/" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                ← Home
+            </a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <p class="text-sm text-gray-600 mb-4">
+                Questi abbinamenti sono stati rifiutati e non verranno più suggeriti automaticamente.
+                Puoi rimuoverli dalla lista per farli riapparire nei suggerimenti.
+            </p>
+
+            {% if rifiutati %}
+            <div class="space-y-3">
+                {% for rif in rifiutati %}
+                <div class="border-l-4 border-red-500 bg-red-50 p-4 rounded flex justify-between items-center">
+                    <div class="flex-1 grid grid-cols-3 gap-4">
+                        <!-- Lezione -->
+                        <div>
+                            <div class="font-semibold text-blue-700">📚 Lezione</div>
+                            <div class="text-sm font-medium">{{ rif.studente }}</div>
+                            <div class="text-xs text-gray-600">📅 {{ rif.lez_giorno }} ⏰ {{ rif.lez_ora }}</div>
+                            <div class="text-xs text-gray-500 mt-1">Costo: {{ rif.costo }} RUB</div>
+                        </div>
+
+                        <!-- Pagamento -->
+                        <div>
+                            <div class="font-semibold text-green-700">💰 Pagamento</div>
+                            <div class="text-sm font-medium">{{ rif.pagante }}</div>
+                            <div class="text-xs text-gray-600">📅 {{ rif.pag_giorno }} ⏰ {{ rif.pag_ora }}</div>
+                            <div class="text-xs text-gray-500 mt-1">Somma: {{ rif.somma }} RUB</div>
+                        </div>
+
+                        <!-- Info Rifiuto -->
+                        <div>
+                            <div class="font-semibold text-red-700">🚫 Rifiutato</div>
+                            <div class="text-xs text-gray-600">{{ rif.rifiutato_at }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Azioni -->
+                    <div class="ml-4">
+                        <form action="/delete_rifiutato/{{ rif.id }}" method="POST"
+                              onsubmit="return confirm('Rimuovere questo rifiuto? Il suggerimento potrebbe riapparire.')">
+                            <button type="submit"
+                                    class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 font-semibold">
+                                ♻️ Ripristina
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nessun abbinamento rifiutato</p>
+            {% endif %}
+
+            <div class="mt-6 p-4 bg-blue-50 rounded border border-blue-200">
+                <div class="text-sm font-semibold text-blue-800 mb-2">ℹ️ Come funziona:</div>
+                <ul class="text-xs text-gray-700 space-y-1">
+                    <li>• Gli abbinamenti rifiutati non appariranno più nei "Suggerimenti Automatici"</li>
+                    <li>• Puoi ripristinare un rifiuto cliccando "♻️ Ripristina"</li>
+                    <li>• I rifiuti vengono salvati permanentemente nel database</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

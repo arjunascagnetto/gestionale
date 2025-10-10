@@ -14,6 +14,9 @@
         .lesson-item.abbinato { @apply border-gray-600 bg-gray-200; }
         .payment-item.abbinato { @apply border-blue-600 bg-blue-100; }
 
+        /* Stile quando completamente usato (residuo = 0) */
+        .payment-item.completamente-usato { @apply border-gray-600 bg-gray-200 opacity-75; }
+
         /* Stile quando selezionato (checkbox): bordo blu, sfondo blu chiaro */
         .lesson-item.selected { @apply border-blue-500 bg-blue-50; }
         .payment-item.selected { @apply border-blue-500 bg-blue-50; }
@@ -48,7 +51,20 @@
 </head>
 <body class="bg-gray-50 p-6">
     <div class="max-w-7xl mx-auto">
-        <h1 class="text-3xl font-bold mb-6 text-center">📊 Gestione Storico Pagamenti e Lezioni</h1>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">📊 Gestione Storico Pagamenti e Lezioni</h1>
+            <div class="flex gap-3">
+                <a href="/normalizza" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">
+                    🔧 Normalizza
+                </a>
+                <a href="/rifiutati" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+                    🚫 Rifiutati
+                </a>
+                <a href="/stats" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                    📈 Statistiche
+                </a>
+            </div>
+        </div>
 
         <!-- Grid 2 colonne -->
         <div class="grid grid-cols-2 gap-6 mb-6">
@@ -65,6 +81,38 @@
                            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
                             ↓ Data
                         </a>
+                    </div>
+                </div>
+
+                <!-- Filtro Studenti -->
+                <div class="mb-4 p-3 bg-gray-50 rounded border border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-semibold text-sm">🔍 Filtra per Studente</h3>
+                        <button onclick="toggleStudentFilter()"
+                                class="text-xs text-blue-600 hover:text-blue-800">
+                            <span id="student-filter-toggle">▼ Mostra</span>
+                        </button>
+                    </div>
+                    <div id="student-filter-list" class="hidden max-h-40 overflow-y-auto space-y-1">
+                        {% for studente in all_studenti %}
+                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            <input type="checkbox"
+                                   class="student-filter-checkbox"
+                                   value="{{ studente }}"
+                                   {% if studente in filter_studenti %}checked{% endif %}>
+                            <span>{{ studente }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-2 flex gap-2">
+                        <button onclick="applyFilters()"
+                                class="flex-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
+                            ✓ Applica Filtri
+                        </button>
+                        <button onclick="clearStudentFilters()"
+                                class="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400">
+                            ✗ Reset
+                        </button>
                     </div>
                 </div>
 
@@ -92,6 +140,10 @@
                                     <span class="ml-2 px-2 py-0.5 bg-gray-600 text-white text-xs rounded">
                                         Abbinata ({{ lesson.quota_pagata }} RUB)
                                     </span>
+                                    <button onclick="viewLessonAbbinamenti({{ lesson.id }}); event.stopPropagation();"
+                                            class="ml-2 px-2 py-0.5 bg-orange-500 text-white text-xs rounded hover:bg-orange-600">
+                                        🗑️ Elimina abbinamenti
+                                    </button>
                                     {% endif %}
                                 </div>
                                 <div class="text-sm mt-1 flex items-center gap-2">
@@ -147,20 +199,64 @@
                     </div>
                 </div>
 
+                <!-- Filtro Paganti -->
+                <div class="mb-4 p-3 bg-gray-50 rounded border border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-semibold text-sm">🔍 Filtra per Pagante</h3>
+                        <button onclick="togglePaymentFilter()"
+                                class="text-xs text-blue-600 hover:text-blue-800">
+                            <span id="payment-filter-toggle">▼ Mostra</span>
+                        </button>
+                    </div>
+                    <div id="payment-filter-list" class="hidden max-h-40 overflow-y-auto space-y-1">
+                        {% for pagante in all_paganti %}
+                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            <input type="checkbox"
+                                   class="payment-filter-checkbox"
+                                   value="{{ pagante }}"
+                                   {% if pagante in filter_paganti %}checked{% endif %}>
+                            <span>{{ pagante }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-2 flex gap-2">
+                        <button onclick="applyFilters()"
+                                class="flex-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
+                            ✓ Applica Filtri
+                        </button>
+                        <button onclick="clearPaymentFilters()"
+                                class="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400">
+                            ✗ Reset
+                        </button>
+                    </div>
+                </div>
+
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="payments-list">
                     {% for payment in payments %}
-                    <div class="payment-item p-3 rounded {% if payment.has_abbinamenti %}abbinato{% endif %}">
+                    <div class="payment-item p-3 rounded {% if payment.is_completamente_usato %}completamente-usato{% elif payment.has_abbinamenti %}abbinato{% endif %}" id="payment-{{ payment.id }}">
                         <label class="flex items-start cursor-pointer">
                             <input type="checkbox"
                                    name="payments[]"
                                    value="{{ payment.id }}"
                                    data-residuo="{{ payment.residuo }}"
                                    class="mt-1 mr-3 w-5 h-5 payment-checkbox"
-                                   onchange="updateTotals()">
+                                   onchange="updateTotals()"
+                                   {% if payment.is_completamente_usato %}disabled{% endif %}>
                             <div class="flex-1">
-                                <div class="font-semibold">{{ payment.nome_pagante }}</div>
+                                <div class="font-semibold flex items-center gap-2">
+                                    {{ payment.nome_pagante }}
+                                    {% if payment.is_completamente_usato %}
+                                    <span class="px-2 py-0.5 bg-gray-600 text-white text-xs rounded">✓ COMPLETAMENTE USATO</span>
+                                    {% endif %}
+                                    {% if payment.has_abbinamenti %}
+                                    <button onclick="togglePaymentDetails({{ payment.id }}); event.stopPropagation();"
+                                            class="px-2 py-0.5 bg-purple-500 text-white text-xs rounded hover:bg-purple-600">
+                                        👁️ Vedi abbinamenti
+                                    </button>
+                                    {% endif %}
+                                </div>
                                 <div class="text-sm text-gray-600">
-                                    💵 {{ payment.residuo }} {{ payment.valuta }}
+                                    💵 Residuo: {{ payment.residuo }} {{ payment.valuta }}
                                     <span class="text-xs">(di {{ payment.somma }} totali)</span>
                                     {% if payment.has_abbinamenti %}
                                     <span class="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
@@ -170,6 +266,13 @@
                                 </div>
                                 <div class="text-xs text-gray-500">
                                     📅 {{ payment.giorno }} ⏰ {{ payment.ora }}
+                                </div>
+                                <!-- Dettagli abbinamenti (nascosti di default) -->
+                                <div id="payment-details-{{ payment.id }}" class="hidden mt-2 p-2 bg-purple-50 rounded border border-purple-200">
+                                    <div class="text-xs font-semibold text-purple-700 mb-1">Abbinato a:</div>
+                                    <div id="payment-details-content-{{ payment.id }}" class="text-xs text-gray-700">
+                                        <div class="animate-pulse">Caricamento...</div>
+                                    </div>
                                 </div>
                             </div>
                         </label>
@@ -667,8 +770,188 @@
             });
         }
 
+        // ===== ELIMINA ABBINAMENTI LEZIONE =====
+
+        function viewLessonAbbinamenti(lessonId) {
+            // Fetch abbinamenti della lezione via API
+            fetch(`/get_lesson_abbinamenti/${lessonId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.abbinamenti && data.abbinamenti.length > 0) {
+                        let message = `Questa lezione ha ${data.abbinamenti.length} abbinamenti:\n\n`;
+                        data.abbinamenti.forEach((abb, idx) => {
+                            message += `${idx + 1}. ${abb.nome_pagante} - ${abb.giorno} ${abb.ora}: ${abb.quota} RUB\n`;
+                        });
+                        message += `\nEliminare TUTTI gli abbinamenti di questa lezione?`;
+
+                        if (confirm(message)) {
+                            deleteLessonAbbinamenti(lessonId);
+                        }
+                    } else {
+                        alert('Nessun abbinamento trovato per questa lezione.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore:', error);
+                    alert('Errore nel recuperare gli abbinamenti');
+                });
+        }
+
+        function deleteLessonAbbinamenti(lessonId) {
+            // Mostra loading
+            document.getElementById('loading-overlay').classList.add('show');
+
+            fetch(`/delete_lesson_abbinamenti/${lessonId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading-overlay').classList.remove('show');
+
+                if (data.success) {
+                    alert(`Eliminati ${data.deleted_count} abbinamenti`);
+                    window.location.reload();
+                } else {
+                    alert('Errore durante l\'eliminazione: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading-overlay').classList.remove('show');
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
+        }
+
+        // ===== DETTAGLI PAGAMENTO =====
+
+        function togglePaymentDetails(paymentId) {
+            const detailsDiv = document.getElementById(`payment-details-${paymentId}`);
+            const contentDiv = document.getElementById(`payment-details-content-${paymentId}`);
+
+            if (detailsDiv.classList.contains('hidden')) {
+                // Mostra e carica dettagli
+                detailsDiv.classList.remove('hidden');
+
+                // Fetch abbinamenti via API
+                fetch(`/get_payment_details/${paymentId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.abbinamenti && data.abbinamenti.length > 0) {
+                            let html = '<div class="space-y-1">';
+                            data.abbinamenti.forEach(abb => {
+                                html += `<div class="flex justify-between items-center">
+                                    <span>📚 ${abb.studente} - ${abb.giorno} ${abb.ora}</span>
+                                    <span class="font-semibold">${abb.quota} RUB</span>
+                                </div>`;
+                            });
+                            html += '</div>';
+                            contentDiv.innerHTML = html;
+                        } else {
+                            contentDiv.innerHTML = '<div class="text-gray-500">Nessun abbinamento</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Errore:', error);
+                        contentDiv.innerHTML = '<div class="text-red-500">Errore caricamento</div>';
+                    });
+            } else {
+                // Nascondi
+                detailsDiv.classList.add('hidden');
+            }
+        }
+
+        // ===== FILTRI =====
+
+        function toggleStudentFilter() {
+            const filterList = document.getElementById('student-filter-list');
+            const toggleText = document.getElementById('student-filter-toggle');
+
+            if (filterList.classList.contains('hidden')) {
+                filterList.classList.remove('hidden');
+                toggleText.textContent = '▲ Nascondi';
+            } else {
+                filterList.classList.add('hidden');
+                toggleText.textContent = '▼ Mostra';
+            }
+        }
+
+        function togglePaymentFilter() {
+            const filterList = document.getElementById('payment-filter-list');
+            const toggleText = document.getElementById('payment-filter-toggle');
+
+            if (filterList.classList.contains('hidden')) {
+                filterList.classList.remove('hidden');
+                toggleText.textContent = '▲ Nascondi';
+            } else {
+                filterList.classList.add('hidden');
+                toggleText.textContent = '▼ Mostra';
+            }
+        }
+
+        function applyFilters() {
+            // Ottieni studenti selezionati
+            const studentCheckboxes = document.querySelectorAll('.student-filter-checkbox:checked');
+            const selectedStudents = Array.from(studentCheckboxes).map(cb => cb.value);
+
+            // Ottieni paganti selezionati
+            const paymentCheckboxes = document.querySelectorAll('.payment-filter-checkbox:checked');
+            const selectedPaganti = Array.from(paymentCheckboxes).map(cb => cb.value);
+
+            // Costruisci URL con parametri filtro
+            const params = new URLSearchParams();
+
+            // Mantieni parametri ordinamento
+            params.set('lesson_order', '{{ lesson_order }}');
+            params.set('payment_order', '{{ payment_order }}');
+
+            // Aggiungi filtri studenti
+            selectedStudents.forEach(studente => {
+                params.append('studenti', studente);
+            });
+
+            // Aggiungi filtri paganti
+            selectedPaganti.forEach(pagante => {
+                params.append('paganti', pagante);
+            });
+
+            // Ricarica pagina con filtri
+            window.location.href = '/?' + params.toString();
+        }
+
+        function clearStudentFilters() {
+            // Deselezione tutti i checkbox studenti
+            document.querySelectorAll('.student-filter-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+
+            // Applica filtri (che saranno vuoti, quindi mostra tutto)
+            applyFilters();
+        }
+
+        function clearPaymentFilters() {
+            // Deselezione tutti i checkbox paganti
+            document.querySelectorAll('.payment-filter-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+
+            // Applica filtri (che saranno vuoti, quindi mostra tutto)
+            applyFilters();
+        }
+
         // Inizializza al caricamento
         updateTotals();
+
+        // Auto-espandi filtri se sono attivi
+        {% if filter_studenti|length > 0 %}
+        toggleStudentFilter();
+        {% endif %}
+
+        {% if filter_paganti|length > 0 %}
+        togglePaymentFilter();
+        {% endif %}
     </script>
 </body>
 </html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistiche - Lezioni e Guadagni</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header con navigazione e selettore mese -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">📊 Statistiche Lezioni e Guadagni</h1>
+            <div class="flex gap-3 items-center">
+                <!-- Selettore Mese/Anno -->
+                <form method="GET" action="/stats" class="flex gap-2 items-center">
+                    <label class="text-sm font-semibold">📅 Mese:</label>
+                    <select name="month" class="px-3 py-2 border rounded" onchange="this.form.submit()">
+                        {% for m in stats.available_months %}
+                        <option value="{{ m.value }}" {% if m.value == stats.selected_month %}selected{% endif %}>
+                            {{ m.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <select name="year" class="px-3 py-2 border rounded" onchange="this.form.submit()">
+                        {% for y in stats.available_years %}
+                        <option value="{{ y }}" {% if y == stats.selected_year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+                <a href="/" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    ← Home
+                </a>
+            </div>
+        </div>
+
+        <!-- Periodo di riferimento -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="p-4 bg-blue-50 rounded">
+                    <div class="text-sm text-gray-600">Oggi</div>
+                    <div class="text-2xl font-bold text-blue-600">{{ stats.today.date }}</div>
+                </div>
+                <div class="p-4 bg-green-50 rounded">
+                    <div class="text-sm text-gray-600">Questa Settimana</div>
+                    <div class="text-lg font-bold text-green-600">{{ stats.week.start }} → {{ stats.week.end }}</div>
+                </div>
+                <div class="p-4 bg-purple-50 rounded">
+                    <div class="text-sm text-gray-600">Mese Selezionato</div>
+                    <div class="text-2xl font-bold text-purple-600">{{ stats.month.name }} {{ stats.month.year }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GUADAGNI STIMATI vs REALI (PRIMA - più importante) -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6 border-4 border-green-500">
+            <h2 class="text-2xl font-bold mb-4 text-green-700">💰 GUADAGNI</h2>
+
+            <!-- Mese Selezionato (PIÙ GRANDE) -->
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div class="text-center p-8 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-400">
+                    <div class="text-sm text-gray-600 mb-2">STIMA (costi lezioni)</div>
+                    <div class="text-7xl font-bold text-green-700">{{ "{:,.0f}".format(stats.income.estimated_month) }} ₽</div>
+                    <div class="text-xl text-gray-700 mt-3 font-semibold">{{ stats.month.name }} {{ stats.month.year }}</div>
+                    <div class="text-sm text-gray-600 mt-1">{{ stats.lessons.month }} lezioni totali</div>
+                </div>
+                <div class="text-center p-8 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-400">
+                    <div class="text-sm text-gray-600 mb-2">REALE (SMS Telegram)</div>
+                    <div class="text-7xl font-bold text-blue-700">{{ "{:,.0f}".format(stats.payments.month) }} ₽</div>
+                    <div class="text-xl text-gray-700 mt-3 font-semibold">{{ stats.month.name }} {{ stats.month.year }}</div>
+                    <div class="text-sm text-gray-600 mt-1">{{ stats.payments.month_count }} pagamenti ricevuti</div>
+                </div>
+            </div>
+
+            <!-- Oggi, Settimana -->
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Oggi -->
+                <div class="p-4 bg-blue-50 rounded-lg">
+                    <div class="text-sm font-semibold text-gray-700 mb-3">📅 Oggi</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">Stima:</span>
+                        <span class="text-2xl font-bold text-green-600">{{ "{:,.0f}".format(stats.income.estimated_today) }} ₽</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600">Reale:</span>
+                        <span class="text-2xl font-bold text-blue-600">{{ "{:,.0f}".format(stats.payments.today) }} ₽</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-2">{{ stats.lessons.today }} lezioni oggi</div>
+                </div>
+
+                <!-- Questa Settimana -->
+                <div class="p-4 bg-green-50 rounded-lg">
+                    <div class="text-sm font-semibold text-gray-700 mb-3">📅 Questa Settimana</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">Stima:</span>
+                        <span class="text-2xl font-bold text-green-600">{{ "{:,.0f}".format(stats.income.estimated_week) }} ₽</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600">Reale:</span>
+                        <span class="text-2xl font-bold text-blue-600">{{ "{:,.0f}".format(stats.payments.week) }} ₽</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-2">{{ stats.lessons.week }} lezioni questa settimana</div>
+                </div>
+            </div>
+
+            <!-- Media giornaliera -->
+            <div class="mt-6 text-center p-4 bg-purple-50 rounded-lg">
+                <div class="text-sm text-gray-600">Media Giornaliera Pagamenti</div>
+                <div class="text-4xl font-bold text-purple-600">{{ "{:,.0f}".format(stats.payments.month_avg) }} ₽</div>
+                <div class="text-xs text-gray-500 mt-1">{{ stats.month.name }} {{ stats.month.year }}</div>
+            </div>
+        </div>
+
+        <!-- Statistiche Lezioni PASSATE vs FUTURE -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📚 Lezioni Svolte vs Future</h2>
+
+            <div class="grid grid-cols-2 gap-6 mb-4">
+                <!-- Settimana -->
+                <div class="p-4 bg-gradient-to-r from-green-50 to-white rounded-lg border-2 border-green-300">
+                    <div class="text-sm font-semibold text-gray-700 mb-3">Questa Settimana</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">✅ Già svolte:</span>
+                        <span class="text-3xl font-bold text-green-600">{{ stats.lessons.week_past }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600">📅 Future:</span>
+                        <span class="text-3xl font-bold text-orange-600">{{ stats.lessons.week_future }}</span>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-gray-200">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-semibold text-gray-700">Totale:</span>
+                            <span class="text-2xl font-bold text-blue-600">{{ stats.lessons.week }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mese Selezionato -->
+                <div class="p-4 bg-gradient-to-r from-purple-50 to-white rounded-lg border-2 border-purple-300">
+                    <div class="text-sm font-semibold text-gray-700 mb-3">{{ stats.month.name }} {{ stats.month.year }}</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">✅ Già svolte:</span>
+                        <span class="text-3xl font-bold text-green-600">{{ stats.lessons.month_past }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600">📅 Future:</span>
+                        <span class="text-3xl font-bold text-orange-600">{{ stats.lessons.month_future }}</span>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-gray-200">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-semibold text-gray-700">Totale:</span>
+                            <span class="text-2xl font-bold text-purple-600">{{ stats.lessons.month }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grafico Trend Lezioni (ultimi 30 giorni) -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📈 Trend Lezioni (ultimi 30 giorni)</h2>
+            <canvas id="lessonsChart" height="100"></canvas>
+        </div>
+
+        <!-- Grafico Trend Pagamenti (ultimi 30 giorni) -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📈 Trend Pagamenti (ultimi 30 giorni)</h2>
+            <canvas id="paymentsChart" height="100"></canvas>
+        </div>
+
+        <!-- Statistiche Abbinamenti -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-bold mb-4">🔗 Stato Abbinamenti</h2>
+            <div class="grid grid-cols-4 gap-4">
+                <div class="text-center p-4 bg-green-50 rounded">
+                    <div class="text-3xl font-bold text-green-600">{{ stats.abbinamenti.completamente_pagati }}</div>
+                    <div class="text-xs text-gray-600 mt-1">Lezioni Pagate</div>
+                </div>
+                <div class="text-center p-4 bg-yellow-50 rounded">
+                    <div class="text-3xl font-bold text-yellow-600">{{ stats.abbinamenti.parzialmente_pagati }}</div>
+                    <div class="text-xs text-gray-600 mt-1">Parzialmente Pagati</div>
+                </div>
+                <div class="text-center p-4 bg-red-50 rounded">
+                    <div class="text-3xl font-bold text-red-600">{{ stats.abbinamenti.non_pagati }}</div>
+                    <div class="text-xs text-gray-600 mt-1">Non Pagati</div>
+                </div>
+                <div class="text-center p-4 bg-purple-50 rounded">
+                    <div class="text-3xl font-bold text-purple-600">{{ stats.abbinamenti.gratis }}</div>
+                    <div class="text-xs text-gray-600 mt-1">Lezioni Gratis</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Grafico Lezioni
+        const lessonsCtx = document.getElementById('lessonsChart').getContext('2d');
+        new Chart(lessonsCtx, {
+            type: 'line',
+            data: {
+                labels: {{ stats.chart_lessons.labels | tojson }},
+                datasets: [{
+                    label: 'Lezioni per Giorno',
+                    data: {{ stats.chart_lessons.data | tojson }},
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+
+        // Grafico Pagamenti
+        const paymentsCtx = document.getElementById('paymentsChart').getContext('2d');
+        new Chart(paymentsCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ stats.chart_payments.labels | tojson }},
+                datasets: [{
+                    label: 'Pagamenti per Giorno (RUB)',
+                    data: {{ stats.chart_payments.data | tojson }},
+                    backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                    borderColor: 'rgb(34, 197, 94)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+nome_originale,nome_standardizzato,num_lezioni,note
+Ekaterina,Ekaterina,15,OK
+Tatiana,Tatiana,15,OK
+Sergey,Sergey,13,UNIFICARE con sergey (3 lezioni)
+sergey,Sergey,3,DUPLICATO - unificare in Sergey
+Valentina,Valentina,13,OK
+Daria,Daria,11,UNIFICARE con DAria (2 lezioni)
+DAria,Daria,2,DUPLICATO - unificare in Daria
+Anelia,Anelia,9,OK
+dmitry,Dmitry,9,Capitalizzare prima lettera
+Elena,Elena,8,OK
+Naili,Naili,8,OK
+Aleksey D,Aleksey D,7,OK
+Sofia,Sofia,7,OK
+YanaVasilisa,Yana Vasilisa,7,UNIFICARE tutte le varianti
+Yana Vasilisa,Yana Vasilisa,4,Nome principale
+YAna Vasilisa,Yana Vasilisa,1,DUPLICATO
+Yana e Vasilisa,Yana Vasilisa,1,DUPLICATO
+YanaVAsilisa,Yana Vasilisa,1,DUPLICATO
+YanaVAsilissa,Yana Vasilisa,1,DUPLICATO
+Steve,Steve,5,OK
+Yulia,Yulia,5,OK
+Eva,Eva,4,UNIFICARE con Ева (2 lezioni)
+Ева,Eva,2,DUPLICATO (cirillico) - unificare in Eva
+Ksenya,Ksenya,4,OK
+Seva,Seva,4,OK
+Alex,Alex,3,UNIFICARE con Aleks? O diversi?
+Aleks,Alex,1,Probabilmente stesso studente
+Irina,Irina,3,UNIFICARE con IRina (1 lezione)
+IRina,Irina,1,DUPLICATO - unificare in Irina
+Nikolay,Nikolay,3,OK
+Anna,Anna,1,OK
+Galina,Galina,1,OK
+Margarita,Margarita,1,UNIFICARE con Маргарита?
+Маргарита пробный хочет зом,LEZIONE_PROVA,1,Lezione di prova - da escludere
+Natalia 2 ragazze,Natalia,1,Rimuovere note "2 ragazze"
+Robert,Robert,1,OK
+To,CHIARIRE,1,Nome da chiarire - troppo corto
+Оле ник,CHIARIRE,1,Nome da chiarire - cirillico
+Алексей,Aleksey,1,Probabilmente Aleksey D?
+Eva prova,LEZIONE_PROVA,1,Lezione di prova - da escludere
+Пробный урок Алех,LEZIONE_PROVA,1,Lezione di prova - da escludere
