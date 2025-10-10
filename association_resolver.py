@@ -150,6 +150,115 @@ def get_lessons_by_date_range(payment_date):
         return []
 
 
+def sync_today_lessons_from_calendar():
+    """
+    Sincronizza SOLO le lezioni di OGGI da Google Calendar nel database.
+    Usato dal bot per aggiornare il DB prima del /process.
+
+    Comportamento:
+    - Legge SOLO eventi di oggi dal calendario
+    - INSERT/UPDATE nel DB (mantiene sincronizzazione)
+    - CANCELLA dal DB lezioni che non esistono più nel calendario
+
+    Returns:
+        Numero di lezioni sincronizzate
+    """
+    credentials = service_account.Credentials.from_service_account_file(
+        str(GCAL_SERVICE_ACCOUNT_FILE),
+        scopes=SCOPES
+    )
+    service = build('calendar', 'v3', credentials=credentials)
+
+    # Range: SOLO OGGI (00:00 - 23:59)
+    today = datetime.now().date()
+    time_min = datetime.combine(today, datetime.min.time()).isoformat() + 'Z'
+    time_max = datetime.combine(today, datetime.max.time()).isoformat() + 'Z'
+
+    try:
+        events_result = service.events().list(
+            calendarId=GCAL_CALENDAR_ID,
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # Recupera event_id dal calendario per confronto
+        calendar_event_ids = set()
+
+        synced = 0
+        for event in events:
+            event_id = event['id']
+            calendar_event_ids.add(event_id)
+
+            summary = event.get('summary', '').strip()
+            start = event['start'].get('dateTime', event['start'].get('date'))
+
+            # Salta eventi "prova"
+            if not summary or summary.lower().startswith('prova'):
+                continue
+
+            # Parse date e time
+            if 'T' in start:
+                dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                giorno = dt.strftime('%Y-%m-%d')
+                ora = dt.strftime('%H:%M:%S')
+            else:
+                giorno = start
+                ora = '00:00:00'
+
+            # Normalizza nome studente
+            nome_studente = summary.replace('dmitry1', 'dmitry').strip()
+
+            # Insert or update
+            try:
+                cursor.execute('''
+                    INSERT INTO lezioni (nextcloud_event_id, nome_studente, giorno, ora, stato)
+                    VALUES (?, ?, ?, ?, 'prevista')
+                    ON CONFLICT(nextcloud_event_id) DO UPDATE SET
+                        nome_studente = excluded.nome_studente,
+                        giorno = excluded.giorno,
+                        ora = excluded.ora
+                ''', (event_id, nome_studente, giorno, ora))
+                synced += 1
+            except sqlite3.IntegrityError as e:
+                logger.warning(f"Errore inserimento lezione {event_id}: {e}")
+
+        # CANCELLA lezioni di oggi che non esistono più nel calendario
+        # (es. lezione cancellata sul calendario)
+        if calendar_event_ids:
+            placeholders = ','.join(['?' for _ in calendar_event_ids])
+            cursor.execute(f'''
+                DELETE FROM lezioni
+                WHERE giorno = ?
+                AND nextcloud_event_id NOT IN ({placeholders})
+            ''', [str(today)] + list(calendar_event_ids))
+            deleted = cursor.rowcount
+            if deleted > 0:
+                logger.info(f"🗑️  Rimosse {deleted} lezioni di oggi cancellate dal calendario")
+        else:
+            # Nessun evento oggi, cancella tutte le lezioni di oggi dal DB
+            cursor.execute('DELETE FROM lezioni WHERE giorno = ?', (str(today),))
+            deleted = cursor.rowcount
+            if deleted > 0:
+                logger.info(f"🗑️  Rimosse {deleted} lezioni di oggi (nessun evento sul calendario)")
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"✅ Sincronizzate {synced} lezioni di OGGI da Google Calendar")
+        return synced
+
+    except Exception as e:
+        logger.error(f"❌ Errore sincronizzazione lezioni di oggi: {e}")
+        return 0
+
+
 def sync_lessons_from_calendar(days_back=60):
     """
     Sincronizza le lezioni da Google Calendar nel database.
@@ -239,7 +348,7 @@ def sync_lessons_from_calendar(days_back=60):
 def get_unassociated_payments(include_skipped=False):
     """
     Recupera pagamenti che non sono completamente utilizzati.
-    Un pagamento è "non associato" se la somma di quota_usata in pagamenti_lezioni < somma totale.
+    SOLO PAGAMENTI DI OGGI (stesso giorno).
 
     Args:
         include_skipped: Se True, include anche i pagamenti skipped
@@ -251,7 +360,11 @@ def get_unassociated_payments(include_skipped=False):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
+    # Calcola SOLO data di oggi
+    today = datetime.now().date()
+
     # Pagamenti con residuo disponibile (somma totale - quota già usata)
+    # FILTRO: SOLO pagamenti di OGGI
     if include_skipped:
         # Include anche i pagamenti skipped
         cursor.execute('''
@@ -268,11 +381,12 @@ def get_unassociated_payments(include_skipped=False):
             FROM pagamenti p
             LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
             WHERE p.stato = 'sospeso'
+                AND p.giorno = ?
             GROUP BY p.id_pagamento
             HAVING residuo > 0
             ORDER BY p.giorno DESC, p.ora DESC
             LIMIT 10
-        ''')
+        ''', (str(today),))
     else:
         # Escludi i pagamenti skipped
         cursor.execute('''
@@ -288,12 +402,14 @@ def get_unassociated_payments(include_skipped=False):
                 p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo
             FROM pagamenti p
             LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
-            WHERE p.stato = 'sospeso' AND (p.skipped IS NULL OR p.skipped = 0)
+            WHERE p.stato = 'sospeso'
+                AND (p.skipped IS NULL OR p.skipped = 0)
+                AND p.giorno = ?
             GROUP BY p.id_pagamento
             HAVING residuo > 0
             ORDER BY p.giorno DESC, p.ora DESC
             LIMIT 10
-        ''')
+        ''', (str(today),))
 
     payments = []
     for row in cursor.fetchall():
@@ -474,13 +590,13 @@ async def process_payment(payment, bot):
         nome_studente = existing[0]
         logger.info(f"✅ Associazione esistente trovata: {nome_pagante} → {nome_studente}")
 
-    # Recupera lezioni vicine dal DB (±3 giorni)
+    # Recupera lezioni SOLO dello stesso giorno
     cursor.execute('''
         SELECT id_lezione, nome_studente, giorno, ora
         FROM lezioni
-        WHERE giorno BETWEEN date(?, '-3 days') AND date(?, '+3 days')
-        ORDER BY giorno ASC, ora ASC
-    ''', (payment_date, payment_date))
+        WHERE giorno = ?
+        ORDER BY ora ASC
+    ''', (payment_date,))
 
     lessons_in_range = []
     for row in cursor.fetchall():
@@ -494,14 +610,14 @@ async def process_payment(payment, bot):
     conn.close()
 
     if not lessons_in_range:
-        logger.warning(f"Nessuna lezione trovata nel range ±3 giorni per {payment_date}")
+        logger.warning(f"Nessuna lezione trovata per il giorno {payment_date}")
 
         await bot.send_message(
             chat_id=ADMIN_CHAT_ID,
-            text=f"⚠️ <b>Nessuna lezione vicina</b>\n\n"
+            text=f"⚠️ <b>Nessuna lezione oggi</b>\n\n"
                  f"💰 {residuo}{payment['valuta']} da {nome_pagante}\n"
                  f"📅 {payment_date}\n\n"
-                 f"Non ci sono lezioni nel range ±3 giorni.\n"
+                 f"Non ci sono lezioni per questo giorno.\n"
                  f"Salta questo pagamento per ora.",
             parse_mode='HTML'
         )
@@ -511,7 +627,7 @@ async def process_payment(payment, bot):
     if nome_studente:
         lessons_in_range = [l for l in lessons_in_range if l['nome_studente'] == nome_studente]
 
-    logger.info(f"Trovate {len(lessons_in_range)} lezioni nel range ±3 giorni")
+    logger.info(f"Trovate {len(lessons_in_range)} lezioni per il giorno {payment_date}")
 
     # Prepara messaggio con lezioni
     msg = f"💰 <b>Pagamento</b>: {residuo}{payment['valuta']}"
@@ -526,7 +642,7 @@ async def process_payment(payment, bot):
         msg += f"\n🎫 <b>Abbonamento {abbonamento_type}</b>\n"
         msg += f"Seleziona {num_lezioni} lezioni da associare:\n\n"
     else:
-        msg += f"\n📚 <b>Lezioni vicine (±3 giorni):</b>\n"
+        msg += f"\n📚 <b>Lezioni di oggi:</b>\n"
 
     keyboard = []
     for i, lesson in enumerate(lessons_in_range, 1):
@@ -675,10 +791,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cursor = conn.cursor()
 
                 for lid in selected_lessons:
+                    # Controlla se abbinamento esiste già
                     cursor.execute('''
-                        INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
-                        VALUES (?, ?, ?)
-                    ''', (payment_id, lid, quota_per_lezione))
+                        SELECT id FROM pagamenti_lezioni
+                        WHERE pagamento_id = ? AND lezione_id = ?
+                    ''', (payment_id, lid))
+
+                    existing = cursor.fetchone()
+
+                    if existing:
+                        # Aggiorna quota esistente
+                        cursor.execute('''
+                            UPDATE pagamenti_lezioni
+                            SET quota_usata = quota_usata + ?
+                            WHERE id = ?
+                        ''', (quota_per_lezione, existing[0]))
+                        logger.info(f"⚠️  Abbinamento abbonamento già esistente, aggiornata quota: +{quota_per_lezione}")
+                    else:
+                        # Inserisci nuovo abbinamento
+                        cursor.execute('''
+                            INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                            VALUES (?, ?, ?)
+                        ''', (payment_id, lid, quota_per_lezione))
 
                 conn.commit()
                 conn.close()
@@ -702,10 +836,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
+            # Controlla se abbinamento esiste già
             cursor.execute('''
-                INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
-                VALUES (?, ?, ?)
-            ''', (payment_id, lezione_id, quota_usata))
+                SELECT id FROM pagamenti_lezioni
+                WHERE pagamento_id = ? AND lezione_id = ?
+            ''', (payment_id, lezione_id))
+
+            existing = cursor.fetchone()
+
+            if existing:
+                # Aggiorna quota esistente invece di inserire duplicato
+                cursor.execute('''
+                    UPDATE pagamenti_lezioni
+                    SET quota_usata = quota_usata + ?
+                    WHERE id = ?
+                ''', (quota_usata, existing[0]))
+                logger.info(f"⚠️  Abbinamento già esistente, aggiornata quota: +{quota_usata}")
+            else:
+                # Inserisci nuovo abbinamento
+                cursor.execute('''
+                    INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                    VALUES (?, ?, ?)
+                ''', (payment_id, lezione_id, quota_usata))
 
             conn.commit()
             conn.close()
@@ -887,6 +1039,15 @@ async def process_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler per il comando /process - processa UN pagamento alla volta (esclusi skipped)."""
     if not update.message:
         return
+
+    # PRIMA DI TUTTO: Sincronizza lezioni di OGGI dal calendario
+    await update.message.reply_text("🔄 Sincronizzazione lezioni di oggi...")
+    try:
+        synced = sync_today_lessons_from_calendar()
+        logger.info(f"✅ Sincronizzate {synced} lezioni di oggi prima del /process")
+    except Exception as e:
+        logger.error(f"❌ Errore sincronizzazione lezioni oggi: {e}")
+        await update.message.reply_text(f"⚠️ Errore sync lezioni: {e}\nContinuo comunque...")
 
     # Carica pagamenti non associati (ESCLUSI gli skipped)
     try:

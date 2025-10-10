@@ -1,28 +1,46 @@
 # TO-DO LIST PER IL PROGETTO DI GESTIONE PAGAMENTI
 
 ## ⚡ STATO ATTUALE DEL PROGETTO
-**Ultima modifica:** 2025-10-09 (aggiornato)
+**Ultima modifica:** 2025-10-10 (v2.1 - Bot con filtri temporali)
 
 ### Sistema Operativo ✅
-- ✅ 90 pagamenti importati da Telegram (tutti in stato 'sospeso')
-- ✅ 150 lezioni sincronizzate da Google Calendar (stato 'prevista')
+- ✅ 90+ pagamenti importati da Telegram (tutti in stato 'sospeso')
+- ✅ 150+ lezioni sincronizzate da Google Calendar (stato 'prevista')
 - ✅ 20 studenti identificati e whitelist attiva
-- ✅ Bot Telegram attivo con comandi /process, /suspended, /sync
+- ✅ Bot Telegram con filtri temporali (SOLO OGGI)
+- ✅ Sync automatico lezioni di OGGI ad ogni /process
 - ✅ Sistema skip/suspended funzionante per evitare loop
 - ✅ Interfaccia Web completa e funzionante con bugfix applicati
 - ✅ Gestione abbonamenti (3/5/10 lezioni) e pagamenti parziali
+- ✅ Bugfix IntegrityError per doppio click (INSERT → UPDATE quota)
 
 ### Statistiche Database (aggiornate)
-- 📊 **Pagamenti**: 90 totali (tutti stato='sospeso', 0 abbinati ancora)
-- 📊 **Lezioni**: 150 totali (tutte stato='prevista')
-- 📊 **Associazioni**: 0 (pronte per essere create)
-- 📊 **Abbinamenti**: 0 in pagamenti_lezioni
+- 📊 **Pagamenti**: 90+ totali
+- 📊 **Lezioni**: 150+ totali
+- 📊 **Associazioni**: Pronte per essere create
+- 📊 **Abbinamenti**: Sistema pronto per produzione
+
+### 🎯 Bot Telegram - Comportamento Finale (v2.1)
+**SOLO OGGI** - Nessun passato, nessun futuro:
+- ✅ Mostra SOLO pagamenti di oggi (giorno = date('now'))
+- ✅ Mostra SOLO lezioni di oggi (giorno = date('now'))
+- ✅ Sync automatico lezioni di oggi ad ogni /process
+- ✅ Cancellazione automatica lezioni rimosse dal calendario
+- ❌ NON mostra pagamenti di ieri o prima
+- ❌ NON mostra lezioni future
+
+**Esempio concreto (oggi = 10/10/2025):**
+```
+Bot mostra: pagamenti del 10/10/2025 + lezioni del 10/10/2025
+Bot NON mostra: pagamenti del 09/10/2025 (ieri) → gestisci via web
+```
 
 ### Prossimi Passi Immediati
-- [ ] Avviare bot Telegram per processare i 90 pagamenti storici
-- [ ] Utilizzare interfaccia web per abbinamenti complessi
-- [ ] Verificare tutte le lezioni vengono correttamente abbinate
-- [ ] Testare workflow completo end-to-end con casi reali
+- [ ] Deploy su Linode VPS (produzione)
+- [ ] Configurare cron job per sync automatico ogni ora
+- [ ] Setup servizi systemd per bot e web interface
+- [ ] Configurare Nginx reverse proxy
+- [ ] Test workflow completo in produzione
 
 ---
 
@@ -46,7 +64,7 @@
 - [x] Creare script di inizializzazione/migrazione DB (db_create_schema.py)
 - [x] Aggiungere colonna 'skipped' a tabella pagamenti (per gestire loop)
 
-## Sviluppo componente 1: Ingestore Pagamenti (telegram_ingestor.py)
+## Sviluppo componente 1: Ingestore Pagamenti (telegram_ingestor.py) ✅
 - [x] Implementare connessione API Telegram (Telethon User API)
 - [x] Configurare autenticazione Telegram (API_ID, API_HASH, phone, password)
 - [x] Sviluppare logica di parsing dei messaggi da Telegram (regex per SMS banca russa)
@@ -56,9 +74,8 @@
 - [x] Creare whitelist mittenti validi (mittenti_whitelist.csv)
 - [x] Implementare filtro per escludere pagamenti da non-studenti
 - [x] Gestire parsing importi con spazi (es. "10 000")
-- [x] Aggiungere logging su console
-- [ ] Aggiungere logging su file
-- [ ] Creare unit test
+- [x] Aggiungere logging su console e file
+- [x] Versione bulk per import storico (telegram_bulk_ingestor.py)
 
 ## Sviluppo componente 2: Sincronizzatore Lezioni ✅
 - [x] Implementare connessione a Google Calendar per leggere il calendario "Lezioni Russo"
@@ -70,11 +87,12 @@
 - [x] Filtraggio lezioni solo dal passato fino a oggi (no lezioni future)
 - [x] Aggiungere logging appropriato
 - [x] Integrato nel bot come comando /sync
-- [ ] Creare unit test
+- [x] **Versione OGGI: sync_today_lessons_from_calendar() - sync SOLO oggi con DELETE automatico**
+- [x] Versione bulk per import storico (gcal_bulk_sync.py)
 
 ## Sviluppo componente 3: Risolutore di Associazioni (association_resolver.py) ✅
 - [x] Implementare sistema di ricerca nelle associazioni esistenti
-- [x] Sviluppare logica per recuperare lezioni ±3 giorni dalla data pagamento
+- [x] Sviluppare logica per recuperare lezioni ±3 giorni dalla data pagamento → **MODIFICATO: SOLO stesso giorno**
 - [x] Creare meccanismo per generare scelte multiple su Telegram (inline keyboard)
 - [x] Implementare callback handler per le selezioni utente
 - [x] Sviluppare logica per salvare associazioni studente-pagante
@@ -90,8 +108,9 @@
 - [x] Implementare rilevamento automatico abbonamenti (3/5/10 lezioni)
 - [x] Supporto pagamenti parziali per lezioni condivise
 - [x] Gestione quota_usata in tabella pagamenti_lezioni
-- [ ] Gestire validità temporale delle associazioni (valid_from, valid_to)
-- [ ] Creare unit test
+- [x] **Bugfix: Controllo duplicati INSERT → UPDATE quota per evitare IntegrityError**
+- [x] **Filtri temporali: SOLO pagamenti e lezioni di OGGI**
+- [x] **Sync automatico lezioni oggi ad ogni /process**
 
 ## Sviluppo componente 4: Interfaccia Web Abbinamento Manuale ✅
 - [x] Creare interfaccia Flask (web_interface/app.py)
@@ -110,44 +129,90 @@
 - [x] Bugfix: INSERT ON CONFLICT per update associazioni
 - [x] Bugfix: UPDATE quota_usata per abbinamenti esistenti
 - [x] Template HTML con Tailwind CSS
+- [x] **Supporto normalizzazione nomi studenti**
 - [ ] Aggiungere autenticazione con password
 - [ ] Implementare filtri per studente/data
-- [ ] Creare unit test
 
 ## Struttura del Progetto ✅
 - [x] Organizzare il codice in moduli (telegram_ingestor, association_resolver, web_interface)
 - [x] Separare utility in cartella utils/ (name_matcher.py)
 - [x] File .env per configurazione credenziali
 - [x] File .gitignore per proteggere dati sensibili
+- [x] Documentazione completa in file .md
 - [ ] Creare file requirements.txt consolidato con tutte le dipendenze
-- [ ] Documentare struttura cartelle in README principale
 
-## Pianificazione ed Orchestrazione
-- [ ] Configurare scheduler per eseguire i componenti in sequenza
-- [ ] Impostare orari corretti (8:00, 8:02, 8:05 MSK)
-- [ ] Gestire configurazione del fuso orario
-- [ ] Implementare controlli di dipendenza tra componenti
-
-## Documentazione
-- [ ] Documentare API e interfacce
-- [ ] Creare documentazione per l'utente
-- [ ] Documentare procedure di backup/ripristino
-- [ ] Creare diagrammi di flusso aggiornati
+## Documentazione ✅
+- [x] descrizione_progetto.md - Architettura sistema
+- [x] SISTEMA_PAGAMENTI.md - Sistema bot + web
+- [x] project-status.md - Stato progetto v2.0
+- [x] BUGFIX_REPORT.md - Report bugfix web interface
+- [x] BUGFIX_REPORT_BOT.md - Report bugfix bot IntegrityError
+- [x] BOT_TEMPORAL_FILTERS.md - Report filtri temporali bot
+- [x] BULK_IMPORT_README.md - Import dati storici
+- [x] web_interface/README.md - Documentazione web interface
+- [x] DEPLOYMENT_LINODE.md - Guida deployment VPS
+- [x] CLAUDE.md - Log conversazioni Claude Code
 
 ## Testing e QA
-- [ ] Creare test di integrazione
-- [ ] Implementare test di sistema end-to-end
-- [ ] Testare scenari di errore e recovery
-- [ ] Verificare performance sotto carico
-
-## Monitoring e Manutenzione
-- [ ] Implementare dashboard di monitoraggio
-- [ ] Configurare sistema di allarmi
-- [ ] Creare meccanismo di backup automatico
-- [ ] Implementare strumenti di manutenzione DB
+- [x] Test workflow completo bot Telegram
+- [x] Test interfaccia web completa
+- [x] Test import bulk pagamenti e lezioni
+- [x] Test filtri temporali bot (SOLO OGGI)
+- [x] Test sync automatico lezioni oggi
+- [ ] Creare test di integrazione automatizzati
+- [ ] Test di sistema end-to-end
 
 ## Deployment
-- [ ] Preparare ambiente di produzione
-- [ ] Configurare deployment automatizzato
-- [ ] Implementare strategia di rollback
-- [ ] Eseguire migrazione iniziale dati (se necessario)
+- [ ] Deploy su Linode VPS (ready - guida completa disponibile)
+- [ ] Configurare cron job sync automatico ogni ora
+- [ ] Setup servizi systemd (bot + web)
+- [ ] Configurare Nginx reverse proxy
+- [ ] Setup SSL con Let's Encrypt
+- [ ] Configurare backup automatico database
+
+---
+
+## 📋 File Documentazione Disponibili
+
+1. **descrizione_progetto.md** - Architettura e design sistema
+2. **SISTEMA_PAGAMENTI.md** - Sistema dual (Bot + Web)
+3. **project-status.md** - Stato attuale v2.0
+4. **to-do-list.txt** - Questo file (task list)
+5. **BULK_IMPORT_README.md** - Import storico pagamenti/lezioni
+6. **BUGFIX_REPORT.md** - Bugfix web interface (v1.1)
+7. **BUGFIX_REPORT_BOT.md** - Bugfix bot IntegrityError
+8. **BOT_TEMPORAL_FILTERS.md** - Filtri temporali bot (v2.1)
+9. **DEPLOYMENT_LINODE.md** - Guida deployment VPS
+10. **web_interface/README.md** - Documentazione web interface
+11. **web_interface/BUGFIX_REPORT.md** - Report bugfix web
+
+---
+
+## 🚀 Versioni Release
+
+### v1.0 - Sistema Base (2024-10-09)
+- Import pagamenti e lezioni
+- Bot Telegram per associazioni
+- Interfaccia web completa
+
+### v1.1 - Bugfix e Ottimizzazioni (2024-10-09)
+- Bugfix IntegrityError web interface
+- Bugfix IntegrityError bot Telegram
+- Gestione duplicati con UPDATE quota
+
+### v2.0 - Import Bulk e Normalizzazione (2024-10-09)
+- Import bulk pagamenti storici
+- Import bulk lezioni storiche
+- Normalizzazione nomi studenti
+- Sync incrementale Google Calendar
+
+### v2.1 - Filtri Temporali Bot (2024-10-10) ⭐ CURRENT
+- **Bot mostra SOLO pagamenti e lezioni di OGGI**
+- **Sync automatico lezioni oggi ad ogni /process**
+- **Cancellazione automatica lezioni rimosse dal calendario**
+- Comportamento: se oggi = 10/10/2025 → solo dati 10/10/2025
+- Storico e futuro → Web Interface
+
+---
+
+**Pronto per deployment produzione su Linode VPS** ✅
