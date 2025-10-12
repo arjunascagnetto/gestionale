@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sincronizzazione Dati - Gestionale Lezioni</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-blue-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">📊 Sincronizzazione Dati</h1>
+            <div class="space-x-4">
+                <a href="/" class="hover:underline">🏠 Home</a>
+                <a href="/stats" class="hover:underline">📈 Statistiche</a>
+                <a href="/normalizza" class="hover:underline">✏️ Normalizza</a>
+                <a href="/sync" class="hover:underline font-bold">🔄 Sync</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-4">🔄 Sincronizzazione Dati</h2>
+            <p class="text-gray-600 mb-6">
+                Usa questi pulsanti per aggiornare i dati dal Telegram e Google Calendar.
+                L'ordine consigliato è: <strong>1) Pagamenti → 2) Lezioni → 3) Aggiorna Calendar</strong>
+            </p>
+        </div>
+
+        <!-- Step 1: Aggiorna Pagamenti -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 class="text-xl font-bold mb-3">📥 Step 1: Aggiorna Pagamenti da Telegram</h3>
+            <p class="text-gray-600 mb-4">
+                Importa nuovi pagamenti dal canale Telegram. Lo script legge i messaggi SMS della banca
+                e aggiunge solo i pagamenti nuovi (deduplicazione automatica).
+            </p>
+            <button
+                id="syncPaymentsBtn"
+                onclick="syncPayments()"
+                class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition"
+            >
+                💰 Aggiorna Pagamenti
+            </button>
+            <div id="paymentsOutput" class="mt-4 hidden">
+                <div class="bg-gray-100 border-l-4 p-4 rounded"></div>
+            </div>
+        </div>
+
+        <!-- Step 2: Aggiorna Lezioni -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 class="text-xl font-bold mb-3">📚 Step 2: Aggiorna Lezioni da Google Calendar</h3>
+            <p class="text-gray-600 mb-4">
+                Sincronizza le lezioni dal calendario Google. Lo script scarica SOLO le modifiche dall'ultimo sync
+                (incrementale). Filtra automaticamente eventi futuri e prima del 1 agosto 2025.
+            </p>
+            <button
+                id="syncLessonsBtn"
+                onclick="syncLessons()"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition"
+            >
+                📅 Aggiorna Lezioni
+            </button>
+            <div id="lessonsOutput" class="mt-4 hidden">
+                <div class="bg-gray-100 border-l-4 p-4 rounded"></div>
+            </div>
+        </div>
+
+        <!-- Step 3: Aggiorna Google Calendar -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 class="text-xl font-bold mb-3">🎨 Step 3: Aggiorna Colori su Google Calendar</h3>
+            <p class="text-gray-600 mb-4">
+                Colora di BLU le lezioni completamente pagate su Google Calendar.
+                Aggiorna anche i nomi normalizzati degli studenti. Usa SOLO dopo aver fatto abbinamenti!
+            </p>
+            <button
+                id="updateCalendarBtn"
+                onclick="updateCalendar()"
+                class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition"
+            >
+                🔵 Aggiorna Colori Calendar
+            </button>
+            <div id="calendarOutput" class="mt-4 hidden">
+                <div class="bg-gray-100 border-l-4 p-4 rounded"></div>
+            </div>
+        </div>
+
+        <!-- Info Box -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg">
+            <h4 class="font-bold mb-2">ℹ️ Note Importanti:</h4>
+            <ul class="list-disc list-inside space-y-2 text-gray-700">
+                <li><strong>Incrementale:</strong> Gli script aggiornano solo i dati nuovi/modificati</li>
+                <li><strong>Deduplicazione:</strong> Non vengono creati duplicati nel database</li>
+                <li><strong>Range date:</strong> Le lezioni vengono filtrate dal 1 agosto 2025 a oggi</li>
+                <li><strong>Timeout:</strong> Operazione max 2-5 minuti (poi timeout automatico)</li>
+                <li><strong>Colori:</strong> Esegui Step 3 solo DOPO aver creato abbinamenti pagamenti-lezioni</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        async function syncPayments() {
+            const btn = document.getElementById('syncPaymentsBtn');
+            const output = document.getElementById('paymentsOutput');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sincronizzazione in corso...';
+            output.classList.remove('hidden');
+            output.querySelector('div').innerHTML = '<p class="text-gray-600">🔄 Caricamento...</p>';
+            output.querySelector('div').className = 'bg-blue-100 border-l-4 border-blue-500 p-4 rounded';
+
+            try {
+                const response = await fetch('/api/sync_payments', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-green-700">✅ ${data.message}</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.output}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-green-100 border-l-4 border-green-500 p-4 rounded';
+                } else {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-red-700">❌ Errore</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.error}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+                }
+            } catch (error) {
+                output.querySelector('div').innerHTML = `
+                    <p class="font-bold text-red-700">❌ Errore di connessione</p>
+                    <p class="mt-2 text-sm">${error.message}</p>
+                `;
+                output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '💰 Aggiorna Pagamenti';
+            }
+        }
+
+        async function syncLessons() {
+            const btn = document.getElementById('syncLessonsBtn');
+            const output = document.getElementById('lessonsOutput');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sincronizzazione in corso...';
+            output.classList.remove('hidden');
+            output.querySelector('div').innerHTML = '<p class="text-gray-600">🔄 Caricamento...</p>';
+            output.querySelector('div').className = 'bg-blue-100 border-l-4 border-blue-500 p-4 rounded';
+
+            try {
+                const response = await fetch('/api/sync_lessons', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-green-700">✅ ${data.message}</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.output}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-green-100 border-l-4 border-green-500 p-4 rounded';
+                } else {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-red-700">❌ Errore</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.error}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+                }
+            } catch (error) {
+                output.querySelector('div').innerHTML = `
+                    <p class="font-bold text-red-700">❌ Errore di connessione</p>
+                    <p class="mt-2 text-sm">${error.message}</p>
+                `;
+                output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📅 Aggiorna Lezioni';
+            }
+        }
+
+        async function updateCalendar() {
+            const btn = document.getElementById('updateCalendarBtn');
+            const output = document.getElementById('calendarOutput');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Aggiornamento in corso...';
+            output.classList.remove('hidden');
+            output.querySelector('div').innerHTML = '<p class="text-gray-600">🔄 Caricamento... (può richiedere alcuni minuti)</p>';
+            output.querySelector('div').className = 'bg-blue-100 border-l-4 border-blue-500 p-4 rounded';
+
+            try {
+                const response = await fetch('/api/update_calendar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-green-700">✅ ${data.message}</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.output}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-green-100 border-l-4 border-green-500 p-4 rounded';
+                } else {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-red-700">❌ Errore</p>
+                        <pre class="mt-2 text-sm overflow-x-auto">${data.error}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+                }
+            } catch (error) {
+                output.querySelector('div').innerHTML = `
+                    <p class="font-bold text-red-700">❌ Errore di connessione</p>
+                    <p class="mt-2 text-sm">${error.message}</p>
+                `;
+                output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔵 Aggiorna Colori Calendar';
+            }
+        }
+    </script>
+</body>
+</html>

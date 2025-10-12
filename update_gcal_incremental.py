@@ -4,10 +4,12 @@ Script INCREMENTALE per aggiornare Google Calendar.
 Aggiorna SOLO le lezioni che hanno cambiato stato di pagamento dall'ultimo aggiornamento.
 
 Strategia:
-1. Legge timestamp ultimo aggiornamento da file
+1. Legge timestamp ultimo aggiornamento dal DB (sync_status)
 2. Trova lezioni modificate dopo quel timestamp (updated_at)
-3. Aggiorna solo gli eventi modificati
-4. Salva nuovo timestamp
+3. Aggiorna solo gli eventi modificati (titolo e colore)
+4. Salva nuovo timestamp nel DB
+
+IMPORTANTE: Colora BLU solo le lezioni COMPLETAMENTE PAGATE (quota_pagata >= costo)
 """
 import os
 import sqlite3
@@ -25,7 +27,6 @@ load_dotenv(env_path)
 SERVICE_ACCOUNT_FILE = Path(__file__).parent / os.getenv('GCAL_SERVICE_ACCOUNT_FILE')
 CALENDAR_ID = os.getenv('GCAL_CALENDAR_ID')
 DB_PATH = Path(__file__).parent / "pagamenti.db"
-TIMESTAMP_FILE = Path(__file__).parent / ".gcal_last_update"
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 COLOR_PAID = '9'  # BLU (Blueberry)
@@ -41,22 +42,56 @@ def get_calendar_service():
 
 
 def get_last_update_timestamp():
-    """Legge timestamp ultimo aggiornamento."""
-    if TIMESTAMP_FILE.exists():
-        try:
-            with open(TIMESTAMP_FILE, 'r') as f:
-                timestamp_str = f.read().strip()
-                return datetime.fromisoformat(timestamp_str)
-        except Exception as e:
-            print(f"⚠️  Errore lettura timestamp: {e}")
+    """Legge timestamp ultimo aggiornamento colori dal DB."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT last_sync_at FROM sync_status WHERE source = 'calendar_colors'
+        ''')
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return datetime.fromisoformat(row[0])
+        else:
             return None
-    return None
+    except Exception as e:
+        print(f"⚠️  Errore lettura timestamp: {e}")
+        return None
 
 
 def save_update_timestamp():
-    """Salva timestamp corrente."""
-    with open(TIMESTAMP_FILE, 'w') as f:
-        f.write(datetime.now().isoformat())
+    """Salva timestamp aggiornamento colori nel DB."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # Crea tabella se non esiste
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sync_status (
+                source TEXT PRIMARY KEY,
+                last_sync_at TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # INSERT or UPDATE
+        cursor.execute('''
+            INSERT INTO sync_status (source, last_sync_at, updated_at)
+            VALUES ('calendar_colors', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(source) DO UPDATE SET
+                last_sync_at = excluded.last_sync_at,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (datetime.now().isoformat(),))
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️  Errore salvataggio timestamp: {e}")
 
 
 def get_modified_lessons(db_path, since_timestamp):

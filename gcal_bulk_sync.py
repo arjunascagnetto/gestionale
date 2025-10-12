@@ -141,6 +141,11 @@ def sync_all_lessons(service, calendar_id, start_date, end_date, db_path):
                 giorno = start
                 ora = '00:00:00'
 
+            # FILTRO: SOLO dal 1 agosto 2025 a oggi (NO futuro, NO prima agosto)
+            oggi = datetime.now().date().isoformat()
+            if giorno > oggi or giorno < '2025-08-01':
+                continue
+
             # Normalizza nome studente
             # Rimuovi varianti tipo "dmitry1" → "dmitry"
             nome_studente = summary.replace('dmitry1', 'dmitry').strip()

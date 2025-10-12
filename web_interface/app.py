@@ -1014,16 +1014,87 @@ def api_delete_association(assoc_id):
         conn.close()
 
 
-@app.route('/api/update_calendar', methods=['POST'])
-def api_update_calendar():
-    """API per eseguire aggiornamento INCREMENTALE Google Calendar."""
+@app.route('/sync')
+def sync():
+    """Pagina per sincronizzazione dati."""
+    return render_template('sync.html')
+
+
+@app.route('/api/sync_payments', methods=['POST'])
+def api_sync_payments():
+    """API per importare nuovi pagamenti da Telegram."""
     import subprocess
 
     try:
-        # Usa la versione incrementale (più veloce, aggiorna solo modifiche)
+        script_path = Path(__file__).parent.parent / 'telegram_ingestor.py'
+
+        result = subprocess.run(
+            [str(Path(__file__).parent.parent / '.cal/bin/python'), str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'output': result.stdout,
+                'message': 'Pagamenti aggiornati da Telegram'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.stderr or result.stdout
+            }), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Timeout: operazione troppo lunga'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/sync_lessons', methods=['POST'])
+def api_sync_lessons():
+    """API per sincronizzare lezioni da Google Calendar (incrementale)."""
+    import subprocess
+
+    try:
+        script_path = Path(__file__).parent.parent / 'gcal_incremental_sync.py'
+
+        result = subprocess.run(
+            [str(Path(__file__).parent.parent / '.cal/bin/python'), str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'output': result.stdout,
+                'message': 'Lezioni sincronizzate da Google Calendar'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.stderr or result.stdout
+            }), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Timeout: operazione troppo lunga'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/update_calendar', methods=['POST'])
+def api_update_calendar():
+    """API per aggiornare Google Calendar (colori lezioni pagate + normalizzazione nomi)."""
+    import subprocess
+
+    try:
+        # Usa update_gcal_incremental.py (aggiorna colori lezioni pagate)
         script_path = Path(__file__).parent.parent / 'update_gcal_incremental.py'
 
-        # Esegui e cattura output
         result = subprocess.run(
             [str(Path(__file__).parent.parent / '.cal/bin/python'), str(script_path)],
             capture_output=True,
@@ -1035,7 +1106,7 @@ def api_update_calendar():
             return jsonify({
                 'success': True,
                 'output': result.stdout,
-                'message': 'Calendario aggiornato con successo (solo modifiche)'
+                'message': 'Calendar aggiornato: colori lezioni pagate applicati'
             })
         else:
             return jsonify({
