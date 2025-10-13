@@ -131,28 +131,35 @@ def sync_incremental_lessons(service, calendar_id, last_sync, db_path):
     """
     print(f"📥 Sincronizzazione incrementale lezioni da Google Calendar")
 
+    # Calcola range date: dal giorno ultimo sync a oggi
+    oggi = datetime.now().date()
+
+    if last_sync:
+        # Prendi SOLO il giorno dell'ultimo sync (ignora ora)
+        start_date = last_sync.date()
+        # Range: dal giorno ultimo sync fino a oggi
+        time_min = start_date.isoformat() + 'T00:00:00Z'
+        time_max = oggi.isoformat() + 'T23:59:59Z'
+        print(f"   Modalità: INCREMENTALE")
+        print(f"   Range: {start_date} → {oggi} (dal giorno ultimo sync a oggi)")
+    else:
+        # Prima esecuzione: scarica tutto (da agosto 2025)
+        start_date = datetime(2025, 8, 1).date()
+        time_min = start_date.isoformat() + 'T00:00:00Z'
+        time_max = oggi.isoformat() + 'T23:59:59Z'
+        print(f"   Modalità: PRIMA ESECUZIONE")
+        print(f"   Range: {start_date} → {oggi} (da agosto 2025 a oggi)")
+
     # Parametri query
     params = {
         'calendarId': calendar_id,
         'singleEvents': True,
-        'orderBy': 'updated',  # Ordina per data modifica
-        'showDeleted': True,   # Includi eventi cancellati
-        'timeMax': datetime.now(timezone.utc).replace(hour=23, minute=59, second=59).isoformat(),  # Solo fino a oggi
+        'orderBy': 'startTime',  # Ordina per data evento
+        'showDeleted': True,     # Includi eventi cancellati
+        'timeMin': time_min,     # Dal giorno ultimo sync
+        'timeMax': time_max,     # Fino a oggi
     }
 
-    if last_sync:
-        # Sync incrementale: solo eventi modificati dopo last_sync
-        # updatedMin richiede formato RFC3339 con Z
-        updated_min = last_sync.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-        params['updatedMin'] = updated_min
-        print(f"   Modalità: INCREMENTALE (modifiche dopo {last_sync.strftime('%Y-%m-%d %H:%M:%S')} UTC)")
-    else:
-        # Prima esecuzione: scarica tutto (ultimi 6 mesi per sicurezza)
-        time_min = datetime.now().replace(month=max(1, datetime.now().month - 6)).isoformat() + 'Z'
-        params['timeMin'] = time_min
-        print(f"   Modalità: PRIMA ESECUZIONE (tutto dallo storico)")
-
-    print(f"   Range temporale: SOLO passato e oggi (NO eventi futuri)")
     print()
 
     try:
@@ -174,21 +181,27 @@ def sync_incremental_lessons(service, calendar_id, last_sync, db_path):
             if not page_token:
                 break
 
-        print(f"✅ Trovati {len(all_events)} eventi modificati\n")
+        print(f"✅ Trovati {len(all_events)} eventi\n")
+
+        # Connessione database (necessaria anche se nessun evento)
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Conta totale lezioni nel DB
+        cursor.execute("SELECT COUNT(*) FROM lezioni")
+        total_in_db = cursor.fetchone()[0]
 
         if not all_events:
             print("✅ Nessuna modifica da sincronizzare!")
+            conn.close()
             return {
                 'total_events': 0,
                 'synced': 0,
                 'deleted': 0,
                 'skipped_prova': 0,
                 'errors': 0,
+                'total_in_db': total_in_db
             }
-
-        # Connessione database
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
 
         # Statistiche
         synced = 0
@@ -248,11 +261,6 @@ def sync_incremental_lessons(service, calendar_id, last_sync, db_path):
                 giorno = start
                 ora = '00:00:00'
 
-            # FILTRO: SOLO dal 1 agosto 2025 a oggi (NO futuro, NO prima agosto)
-            oggi = datetime.now().date().isoformat()
-            if giorno > oggi or giorno < '2025-08-01':
-                continue
-
             # Normalizza nome studente
             nome_studente = summary.strip()
 
@@ -278,9 +286,9 @@ def sync_incremental_lessons(service, calendar_id, last_sync, db_path):
         # Commit modifiche
         conn.commit()
 
-        # Verifica totale nel database
+        # Verifica totale nel database DOPO le modifiche
         cursor.execute("SELECT COUNT(*) FROM lezioni")
-        total_in_db = cursor.fetchone()[0]
+        total_in_db_after = cursor.fetchone()[0]
 
         conn.close()
 
@@ -291,7 +299,7 @@ def sync_incremental_lessons(service, calendar_id, last_sync, db_path):
             'deleted': deleted,
             'skipped_prova': skipped_prova,
             'errors': errors,
-            'total_in_db': total_in_db
+            'total_in_db': total_in_db_after
         }
 
     except HttpError as error:

@@ -97,6 +97,7 @@ def save_update_timestamp():
 def get_modified_lessons(db_path, since_timestamp):
     """
     Recupera lezioni modificate dopo un certo timestamp.
+    SOLO lezioni con giorno compreso tra: giorno ultimo sync → oggi.
 
     Args:
         db_path: Path del database
@@ -108,8 +109,17 @@ def get_modified_lessons(db_path, since_timestamp):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    # Calcola range date
+    oggi = datetime.now().date().isoformat()
+
     if since_timestamp:
+        # IMPORTANTE: Il range date deve essere DA AGOSTO 2025 A OGGI
+        # perché vogliamo aggiornare TUTTE le lezioni passate che sono cambiate,
+        # non solo quelle del giorno dell'ultimo sync!
+        start_date = '2025-08-01'
+
         # Query per lezioni modificate dopo timestamp
+        # FILTRO: solo lezioni da agosto 2025 a oggi (no futuro)
         query = '''
             SELECT
                 l.nextcloud_event_id,
@@ -121,13 +131,18 @@ def get_modified_lessons(db_path, since_timestamp):
             FROM lezioni l
             LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
             WHERE l.nextcloud_event_id IS NOT NULL
+                AND l.giorno >= ?
+                AND l.giorno <= ?
             GROUP BY l.id_lezione
             HAVING last_modified > ?
         '''
-        cursor.execute(query, (since_timestamp.isoformat(),))
+        cursor.execute(query, (start_date, oggi, since_timestamp.isoformat()))
         print(f"\n🔍 Ricerca lezioni modificate dopo {since_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"   Range date: {start_date} → {oggi} (da agosto 2024 a oggi, no futuro)")
     else:
-        # Prima esecuzione: processa tutte le lezioni
+        # Prima esecuzione: processa tutte le lezioni da agosto 2024 a oggi
+        start_date = '2024-08-01'
+
         query = '''
             SELECT
                 l.nextcloud_event_id,
@@ -139,10 +154,12 @@ def get_modified_lessons(db_path, since_timestamp):
             FROM lezioni l
             LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
             WHERE l.nextcloud_event_id IS NOT NULL
+                AND l.giorno >= ?
+                AND l.giorno <= ?
             GROUP BY l.id_lezione
         '''
-        cursor.execute(query)
-        print(f"\n🔍 Prima esecuzione: processamento di tutte le lezioni")
+        cursor.execute(query, (start_date, oggi))
+        print(f"\n🔍 Prima esecuzione: processamento lezioni da {start_date} a {oggi}")
 
     lessons_map = {}
     for row in cursor.fetchall():
