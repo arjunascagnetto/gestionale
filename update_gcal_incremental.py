@@ -186,13 +186,14 @@ def update_event_incremental(service, calendar_id, event_id, lesson_data):
     Aggiorna un singolo evento in modo incrementale.
 
     Returns:
-        dict: {'renamed': bool, 'colored': bool, 'unchanged': bool, 'error': str}
+        dict: {'renamed': bool, 'colored': bool, 'unchanged': bool, 'error': str, 'skipped_future': bool}
     """
     result = {
         'renamed': False,
         'colored': False,
         'unchanged': False,
-        'error': None
+        'error': None,
+        'skipped_future': False
     }
 
     try:
@@ -201,6 +202,18 @@ def update_event_incremental(service, calendar_id, event_id, lesson_data):
             calendarId=calendar_id,
             eventId=event_id
         ).execute()
+
+        # CONTROLLO DATA: Salta eventi futuri (dopo oggi)
+        start = event['start'].get('dateTime', event['start'].get('date'))
+        if 'T' in start:
+            event_date = datetime.fromisoformat(start.replace('Z', '+00:00')).date()
+        else:
+            event_date = datetime.fromisoformat(start).date()
+
+        oggi = datetime.now().date()
+        if event_date > oggi:
+            result['skipped_future'] = True
+            return result
 
         nome_atteso = lesson_data['nome']
         is_paid = lesson_data['is_paid']
@@ -300,7 +313,8 @@ def main():
         'colored': 0,
         'unchanged': 0,
         'not_found': 0,
-        'errors': 0
+        'errors': 0,
+        'skipped_future': 0
     }
 
     for i, (event_id, lesson_data) in enumerate(lessons_map.items(), 1):
@@ -320,6 +334,9 @@ def main():
             else:
                 stats['errors'] += 1
                 print(f"  ❌ Errore {nome}: {result['error']}")
+        elif result['skipped_future']:
+            stats['skipped_future'] += 1
+            print(f"  ⏭️  Saltato evento futuro: {nome}")
         elif result['renamed']:
             stats['renamed'] += 1
             print(f"  ✏️  Rinominato: {nome}")
@@ -343,6 +360,7 @@ def main():
     print(f"Titoli rinominati: {stats['renamed']}")
     print(f"Eventi colorati BLU: {stats['colored']}")
     print(f"Eventi non modificati: {stats['unchanged']}")
+    print(f"Eventi futuri saltati: {stats['skipped_future']}")
     print(f"Eventi non trovati: {stats['not_found']}")
     print(f"Errori: {stats['errors']}")
     print("="*60)
