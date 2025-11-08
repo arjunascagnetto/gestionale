@@ -20,13 +20,15 @@ def get_db():
     return conn
 
 
-def get_unassigned_lessons(order='DESC', filter_studenti=None):
+def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None):
     """
     Recupera TUTTE le lezioni, con flag per indicare se sono abbinate.
 
     Args:
         order: 'ASC' o 'DESC' per ordinamento data
         filter_studenti: Lista di nomi studenti da filtrare (None = tutti)
+        hide_paid: Se True, nasconde lezioni completamente pagate
+        month_filter: Tupla (mese, anno) per filtrare per mese, None = tutti
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -48,15 +50,30 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None):
     '''
 
     # Aggiungi filtro studenti se specificato
-    where_clause = ''
+    where_clauses = []
     params = []
+
     if filter_studenti and len(filter_studenti) > 0:
         placeholders = ','.join(['?' for _ in filter_studenti])
-        where_clause = f' WHERE l.nome_studente IN ({placeholders})'
-        params = filter_studenti
+        where_clauses.append(f'l.nome_studente IN ({placeholders})')
+        params.extend(filter_studenti)
 
-    query += where_clause
-    query += f' GROUP BY l.id_lezione ORDER BY l.giorno {order}, l.ora {order}'
+    # Filtro mese/anno
+    if month_filter:
+        month, year = month_filter
+        where_clauses.append("strftime('%Y', l.giorno) = ? AND strftime('%m', l.giorno) = ?")
+        params.extend([str(year), f'{month:02d}'])
+
+    if where_clauses:
+        query += ' WHERE ' + ' AND '.join(where_clauses)
+
+    query += f' GROUP BY l.id_lezione'
+
+    # Aggiungi filtro HAVING per lezioni pagate
+    if hide_paid:
+        query += ' HAVING is_completamente_pagata = 0'
+
+    query += f' ORDER BY l.giorno {order}, l.ora {order}'
 
     cursor.execute(query, params)
 
@@ -78,13 +95,15 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None):
     return lessons
 
 
-def get_available_payments(order='DESC', filter_paganti=None):
+def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, month_filter=None):
     """
     Recupera TUTTI i pagamenti (inclusi quelli completamente utilizzati).
 
     Args:
         order: 'ASC' o 'DESC' per ordinamento data
         filter_paganti: Lista di nomi paganti da filtrare (None = tutti)
+        hide_used: Se True, nasconde pagamenti completamente usati
+        month_filter: Tupla (mese, anno) per filtrare per mese, None = tutti
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -111,15 +130,30 @@ def get_available_payments(order='DESC', filter_paganti=None):
     where_clauses = []
     params = []
 
+    # Escludi sempre pagamenti rifiutati
+    where_clauses.append("p.stato != 'rejected'")
+
     if filter_paganti and len(filter_paganti) > 0:
         placeholders = ','.join(['?' for _ in filter_paganti])
         where_clauses.append(f'p.nome_pagante IN ({placeholders})')
-        params = filter_paganti
+        params.extend(filter_paganti)
+
+    # Filtro mese/anno
+    if month_filter:
+        month, year = month_filter
+        where_clauses.append("strftime('%Y', p.giorno) = ? AND strftime('%m', p.giorno) = ?")
+        params.extend([str(year), f'{month:02d}'])
 
     if where_clauses:
         query += ' WHERE ' + ' AND '.join(where_clauses)
 
-    query += f' GROUP BY p.id_pagamento ORDER BY p.giorno {order}, p.ora {order}'
+    query += f' GROUP BY p.id_pagamento'
+
+    # Aggiungi filtro HAVING per pagamenti usati
+    if hide_used:
+        query += ' HAVING is_completamente_usato = 0'
+
+    query += f' ORDER BY p.giorno {order}, p.ora {order}'
 
     cursor.execute(query, params)
 
@@ -336,8 +370,22 @@ def index():
     if filter_paganti and len(filter_paganti) == 0:
         filter_paganti = None
 
-    lessons = get_unassigned_lessons(lesson_order, filter_studenti)
-    payments = get_available_payments(payment_order, filter_paganti)
+    # Filtri per nascondere lezioni/pagamenti completati
+    hide_paid_lessons = request.args.get('hide_paid', '0') == '1'
+    hide_used_payments = request.args.get('hide_used', '0') == '1'
+
+    # Filtro mese/anno - default: mese corrente
+    from datetime import datetime
+    today = datetime.now()
+    filter_month = request.args.get('month', str(today.month))
+    filter_year = request.args.get('year', str(today.year))
+    all_time = request.args.get('all_time', '0') == '1'
+
+    # Se all_time, passa None, altrimenti passa mese/anno
+    month_filter = None if all_time else (int(filter_month), int(filter_year))
+
+    lessons = get_unassigned_lessons(lesson_order, filter_studenti, hide_paid_lessons, month_filter)
+    payments = get_available_payments(payment_order, filter_paganti, hide_used_payments, month_filter)
     suggestions = get_suggested_abbinamenti()
     abbinamenti = get_existing_abbinamenti()
 
@@ -355,7 +403,14 @@ def index():
                           all_studenti=all_studenti,
                           all_paganti=all_paganti,
                           filter_studenti=filter_studenti or [],
-                          filter_paganti=filter_paganti or [])
+                          filter_paganti=filter_paganti or [],
+                          hide_paid_lessons=hide_paid_lessons,
+                          hide_used_payments=hide_used_payments,
+                          filter_month=filter_month,
+                          filter_year=filter_year,
+                          all_time=all_time,
+                          current_month=today.month,
+                          current_year=today.year)
 
 
 @app.route('/abbina', methods=['POST'])
@@ -906,6 +961,39 @@ def api_normalize_names():
 
     try:
         total_updated = 0
+
+        # Raggruppa i cambiamenti per nome_canonico
+        canonical_groups = {}
+        for change in changes:
+            old_name = change['old']
+            new_name = change['new']
+            if new_name not in canonical_groups:
+                canonical_groups[new_name] = []
+            canonical_groups[new_name].append(old_name)
+
+        # Per ogni gruppo canonico, gestisci duplicati in associazioni
+        for new_name, old_names in canonical_groups.items():
+            # Trova tutte le associazioni che verrebbero duplicate
+            placeholders = ','.join(['?' for _ in old_names])
+            cursor.execute(f'''
+                SELECT id_assoc, nome_studente, nome_pagante, updated_at
+                FROM associazioni
+                WHERE nome_studente IN ({placeholders})
+                ORDER BY updated_at DESC
+            ''', old_names)
+
+            associations = cursor.fetchall()
+
+            if len(associations) > 1:
+                # Mantieni solo la più recente, elimina le altre
+                keep_id = associations[0]['id_assoc']
+                delete_ids = [a['id_assoc'] for a in associations[1:]]
+
+                if delete_ids:
+                    delete_placeholders = ','.join(['?' for _ in delete_ids])
+                    cursor.execute(f'DELETE FROM associazioni WHERE id_assoc IN ({delete_placeholders})', delete_ids)
+
+        # Ora esegui la normalizzazione
         for change in changes:
             old_name = change['old']
             new_name = change['new']
@@ -915,10 +1003,21 @@ def api_normalize_names():
                           (new_name, old_name))
             updated = cursor.rowcount
 
-            # Aggiorna associazioni
-            cursor.execute('UPDATE associazioni SET nome_studente = ? WHERE nome_studente = ?',
-                          (new_name, old_name))
-            updated += cursor.rowcount
+            # Per associazioni: aggiorna SOLO se old_name != new_name
+            # e SOLO se new_name non esiste già
+            if old_name != new_name:
+                cursor.execute('SELECT COUNT(*) FROM associazioni WHERE nome_studente = ?', (new_name,))
+                if cursor.fetchone()[0] == 0:
+                    # new_name non esiste, possiamo fare UPDATE
+                    cursor.execute('''
+                        UPDATE associazioni
+                        SET nome_studente = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE nome_studente = ?
+                    ''', (new_name, old_name))
+                    updated += cursor.rowcount
+                else:
+                    # new_name esiste già, elimina old_name
+                    cursor.execute('DELETE FROM associazioni WHERE nome_studente = ?', (old_name,))
 
             total_updated += updated
 
@@ -1014,10 +1113,248 @@ def api_delete_association(assoc_id):
         conn.close()
 
 
+@app.route('/approva_paganti')
+def approva_paganti():
+    """Pagina per approvare/rifiutare nuovi paganti."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Recupera pagamenti in attesa di approvazione
+    cursor.execute('''
+        SELECT
+            id_pagamento,
+            nome_pagante,
+            giorno,
+            ora,
+            somma,
+            valuta,
+            created_at
+        FROM pagamenti
+        WHERE stato = 'pending_approval'
+        ORDER BY giorno DESC, ora DESC
+    ''')
+
+    pending_payments = []
+    for row in cursor.fetchall():
+        pending_payments.append({
+            'id': row['id_pagamento'],
+            'nome_pagante': row['nome_pagante'],
+            'giorno': row['giorno'],
+            'ora': row['ora'],
+            'somma': row['somma'],
+            'valuta': row['valuta'],
+            'created_at': row['created_at']
+        })
+
+    # Conta pagamenti per pagante
+    paganti_count = {}
+    for payment in pending_payments:
+        nome = payment['nome_pagante']
+        paganti_count[nome] = paganti_count.get(nome, 0) + 1
+
+    # Recupera pagamenti già rifiutati
+    cursor.execute('''
+        SELECT
+            id_pagamento,
+            nome_pagante,
+            giorno,
+            ora,
+            somma,
+            valuta
+        FROM pagamenti
+        WHERE stato = 'rejected'
+        ORDER BY giorno DESC, ora DESC
+        LIMIT 50
+    ''')
+
+    rejected_payments = []
+    for row in cursor.fetchall():
+        rejected_payments.append({
+            'id': row['id_pagamento'],
+            'nome_pagante': row['nome_pagante'],
+            'giorno': row['giorno'],
+            'ora': row['ora'],
+            'somma': row['somma'],
+            'valuta': row['valuta']
+        })
+
+    conn.close()
+
+    return render_template('approva_paganti.html',
+                          pending_payments=pending_payments,
+                          rejected_payments=rejected_payments,
+                          paganti_count=paganti_count)
+
+
+@app.route('/api/approve_pagante', methods=['POST'])
+def api_approve_pagante():
+    """API per approvare un pagante (cambia tutti i suoi pagamenti da pending_approval a sospeso)."""
+    data = request.get_json()
+    nome_pagante = data.get('nome_pagante', '').strip()
+
+    if not nome_pagante:
+        return jsonify({'success': False, 'error': 'Nome pagante obbligatorio'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # Aggiorna tutti i pagamenti del pagante
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'sospeso'
+            WHERE nome_pagante = ? AND stato = 'pending_approval'
+        ''', (nome_pagante,))
+
+        updated = cursor.rowcount
+
+        # Aggiungi alla whitelist
+        cursor.execute('''
+            INSERT OR IGNORE INTO whitelist_paganti (nome_pagante, approvato)
+            VALUES (?, 1)
+        ''', (nome_pagante,))
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'{updated} pagamenti approvati per {nome_pagante}',
+            'updated': updated
+        })
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/reject_pagante', methods=['POST'])
+def api_reject_pagante():
+    """API per rifiutare un pagante (cambia tutti i suoi pagamenti da pending_approval a rejected)."""
+    data = request.get_json()
+    nome_pagante = data.get('nome_pagante', '').strip()
+
+    if not nome_pagante:
+        return jsonify({'success': False, 'error': 'Nome pagante obbligatorio'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # Aggiorna tutti i pagamenti del pagante
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'rejected'
+            WHERE nome_pagante = ? AND stato = 'pending_approval'
+        ''', (nome_pagante,))
+
+        updated = cursor.rowcount
+
+        # Aggiungi alla whitelist con flag rifiutato
+        cursor.execute('''
+            INSERT OR IGNORE INTO whitelist_paganti (nome_pagante, approvato)
+            VALUES (?, 0)
+        ''', (nome_pagante,))
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'{updated} pagamenti rifiutati per {nome_pagante}',
+            'updated': updated
+        })
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/restore_rejected/<int:payment_id>', methods=['POST'])
+def api_restore_rejected(payment_id):
+    """API per ripristinare un pagamento rifiutato."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'pending_approval'
+            WHERE id_pagamento = ? AND stato = 'rejected'
+        ''', (payment_id,))
+
+        if cursor.rowcount == 0:
+            return jsonify({'success': False, 'error': 'Pagamento non trovato o non rifiutato'}), 404
+
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Pagamento ripristinato'})
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/sync')
 def sync():
     """Pagina per sincronizzazione dati."""
     return render_template('sync.html')
+
+
+@app.route('/api/sync_all', methods=['POST'])
+def api_sync_all():
+    """API per sincronizzare TUTTO: pagamenti + lezioni in sequenza."""
+    import subprocess
+
+    try:
+        python_path = str(Path(__file__).parent.parent / '.cal/bin/python')
+        payments_script = Path(__file__).parent.parent / 'telegram_ingestor.py'
+        lessons_script = Path(__file__).parent.parent / 'gcal_incremental_sync.py'
+
+        outputs = []
+        errors = []
+
+        # 1. Sync pagamenti da Telegram
+        result = subprocess.run(
+            [python_path, str(payments_script)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            outputs.append(f"✅ PAGAMENTI:\n{result.stdout}")
+        else:
+            errors.append(f"❌ PAGAMENTI:\n{result.stderr or result.stdout}")
+
+        # 2. Sync lezioni da Google Calendar
+        result = subprocess.run(
+            [python_path, str(lessons_script)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            outputs.append(f"✅ LEZIONI:\n{result.stdout}")
+        else:
+            errors.append(f"❌ LEZIONI:\n{result.stderr or result.stdout}")
+
+        # Determina successo
+        success = len(errors) == 0
+
+        return jsonify({
+            'success': success,
+            'output': '\n\n'.join(outputs),
+            'error': '\n\n'.join(errors) if errors else None,
+            'message': 'Sincronizzazione completa!' if success else 'Sincronizzazione con errori'
+        }), 200 if success else 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Timeout: operazione troppo lunga'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/sync_payments', methods=['POST'])

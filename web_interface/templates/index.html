@@ -53,9 +53,33 @@
     <div class="max-w-7xl mx-auto">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold">📊 Gestione Storico Pagamenti e Lezioni</h1>
-            <div class="flex gap-3">
+            <div class="flex gap-3 items-center">
+                <!-- Filtro Mese/Anno -->
+                <div class="flex items-center gap-2 bg-white px-4 py-2 rounded shadow">
+                    <label class="text-sm font-semibold">📅</label>
+                    <select id="month-select" class="border rounded px-2 py-1 text-sm">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if m == current_month and not all_time %}selected{% endif %}>
+                            {{ ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'][m-1] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <select id="year-select" class="border rounded px-2 py-1 text-sm">
+                        {% for y in range(2024, current_year + 2) %}
+                        <option value="{{ y }}" {% if y == current_year and not all_time %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="flex items-center gap-1 text-sm cursor-pointer">
+                        <input type="checkbox" id="all-time-checkbox" {% if all_time %}checked{% endif %}>
+                        <span>Tutti</span>
+                    </label>
+                    <button onclick="applyFilters()" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">✓</button>
+                </div>
                 <a href="/" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
                     🏠 Home
+                </a>
+                <a href="/approva_paganti" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">
+                    ✅ Approva Paganti
                 </a>
                 <a href="/normalizza" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">
                     🔧 Normalizza
@@ -109,6 +133,12 @@
                             <span>{{ studente }}</span>
                         </label>
                         {% endfor %}
+                    </div>
+                    <div class="mt-2">
+                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            <input type="checkbox" id="hide-paid-checkbox" {% if hide_paid_lessons %}checked{% endif %}>
+                            <span>👻 Nascondi lezioni pagate</span>
+                        </label>
                     </div>
                     <div class="mt-2 flex gap-2">
                         <button onclick="applyFilters()"
@@ -224,6 +254,12 @@
                             <span>{{ pagante }}</span>
                         </label>
                         {% endfor %}
+                    </div>
+                    <div class="mt-2">
+                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            <input type="checkbox" id="hide-used-checkbox" {% if hide_used_payments %}checked{% endif %}>
+                            <span>👻 Nascondi pagamenti usati</span>
+                        </label>
                     </div>
                     <div class="mt-2 flex gap-2">
                         <button onclick="applyFilters()"
@@ -906,6 +942,15 @@
             const paymentCheckboxes = document.querySelectorAll('.payment-filter-checkbox:checked');
             const selectedPaganti = Array.from(paymentCheckboxes).map(cb => cb.value);
 
+            // Ottieni checkbox hide
+            const hidePaid = document.getElementById('hide-paid-checkbox').checked;
+            const hideUsed = document.getElementById('hide-used-checkbox').checked;
+
+            // Ottieni filtro mese/anno
+            const allTime = document.getElementById('all-time-checkbox').checked;
+            const month = document.getElementById('month-select').value;
+            const year = document.getElementById('year-select').value;
+
             // Costruisci URL con parametri filtro
             const params = new URLSearchParams();
 
@@ -922,6 +967,18 @@
             selectedPaganti.forEach(pagante => {
                 params.append('paganti', pagante);
             });
+
+            // Aggiungi parametri hide
+            if (hidePaid) params.set('hide_paid', '1');
+            if (hideUsed) params.set('hide_used', '1');
+
+            // Aggiungi filtro mese/anno
+            if (allTime) {
+                params.set('all_time', '1');
+            } else {
+                params.set('month', month);
+                params.set('year', year);
+            }
 
             // Ricarica pagina con filtri
             window.location.href = '/?' + params.toString();
