@@ -72,13 +72,14 @@ def load_whitelist(whitelist_path):
         return None
 
 
-def parse_payment_message(message_text, message_date):
+def parse_payment_message(message_text, message_date, valid_senders=None):
     """
     Estrae i dati di pagamento da un messaggio SMS.
 
     Args:
         message_text: Testo del messaggio
         message_date: Data del messaggio (datetime object)
+        valid_senders: Set di nomi paganti validi (None = tutti approvati automaticamente)
 
     Returns:
         dict con i dati estratti o None se il parsing fallisce
@@ -109,13 +110,19 @@ def parse_payment_message(message_text, message_date):
         print(f"⚠️  Errore conversione somma: '{somma_str}' -> '{somma_clean}'")
         return None
 
+    # Determina stato: se è nella whitelist -> 'sospeso', altrimenti -> 'pending_approval'
+    if valid_senders is None:
+        stato = 'sospeso'
+    else:
+        stato = 'sospeso' if nome_pagante in valid_senders else 'pending_approval'
+
     return {
         'nome_pagante': nome_pagante,
         'giorno': giorno,
         'ora': ora,
         'somma': somma,
         'valuta': 'RUB',
-        'stato': 'sospeso'
+        'stato': stato
     }
 
 
@@ -233,30 +240,28 @@ async def main():
     inserted_count = 0
     skipped_count = 0
     error_count = 0
-    filtered_count = 0
+    pending_approval_count = 0
 
     print("\n📝 Processamento messaggi...\n")
 
     for msg in messages:
-        # Parsing del messaggio
-        payment_data = parse_payment_message(msg.text, msg.date)
+        # Parsing del messaggio (passa valid_senders per determinare stato)
+        payment_data = parse_payment_message(msg.text, msg.date, valid_senders)
 
         if not payment_data:
             error_count += 1
             continue
 
-        # Filtra mittenti non validi (se whitelist è attiva)
-        if valid_senders is not None and payment_data['nome_pagante'] not in valid_senders:
-            filtered_count += 1
-            print(f"🚫 Filtrato: {payment_data['nome_pagante']} - {payment_data['somma']}₽ (non è studente)")
-            continue
-
-        # Inserimento nel database
+        # Inserimento nel database (TUTTI i pagamenti vengono inseriti)
         record_id = insert_payment(cursor, payment_data, msg.id)
 
         if record_id:
             inserted_count += 1
-            print(f"✅ Inserito: {payment_data['nome_pagante']} - {payment_data['somma']}₽ - {payment_data['giorno']} {payment_data['ora']}")
+            if payment_data['stato'] == 'pending_approval':
+                pending_approval_count += 1
+                print(f"⏳ Inserito (DA APPROVARE): {payment_data['nome_pagante']} - {payment_data['somma']}₽ - {payment_data['giorno']} {payment_data['ora']}")
+            else:
+                print(f"✅ Inserito: {payment_data['nome_pagante']} - {payment_data['somma']}₽ - {payment_data['giorno']} {payment_data['ora']}")
         else:
             skipped_count += 1
 
@@ -273,10 +278,14 @@ async def main():
     print("="*60)
     print(f"Messaggi trovati: {len(messages)}")
     print(f"Pagamenti inseriti: {inserted_count}")
+    print(f"  - Approvati automaticamente: {inserted_count - pending_approval_count}")
+    print(f"  - In attesa di approvazione: {pending_approval_count}")
     print(f"Già esistenti (saltati): {skipped_count}")
-    print(f"Filtrati (non studenti): {filtered_count}")
     print(f"Errori di parsing: {error_count}")
     print("="*60)
+
+    if pending_approval_count > 0:
+        print(f"\n⚠️  {pending_approval_count} pagamenti richiedono approvazione manuale nell'interfaccia web!")
 
 
 if __name__ == "__main__":

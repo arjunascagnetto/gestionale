@@ -13,8 +13,10 @@
             <h1 class="text-2xl font-bold">📊 Sincronizzazione Dati</h1>
             <div class="space-x-4">
                 <a href="/" class="hover:underline">🏠 Home</a>
-                <a href="/stats" class="hover:underline">📈 Statistiche</a>
+                <a href="/approva_paganti" class="hover:underline">✅ Approva Paganti</a>
                 <a href="/normalizza" class="hover:underline">✏️ Normalizza</a>
+                <a href="/rifiutati" class="hover:underline">🚫 Rifiutati</a>
+                <a href="/stats" class="hover:underline">📈 Statistiche</a>
                 <a href="/sync" class="hover:underline font-bold">🔄 Sync</a>
             </div>
         </div>
@@ -23,10 +25,28 @@
     <div class="container mx-auto p-6">
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
             <h2 class="text-2xl font-bold mb-4">🔄 Sincronizzazione Dati</h2>
-            <p class="text-gray-600 mb-6">
+            <p class="text-gray-600 mb-4">
                 Usa questi pulsanti per aggiornare i dati dal Telegram e Google Calendar.
                 L'ordine consigliato è: <strong>1) Pagamenti → 2) Lezioni → 3) Aggiorna Calendar</strong>
             </p>
+
+            <!-- Pulsante Sync UNIFICATO -->
+            <div class="bg-gradient-to-r from-green-500 to-blue-500 rounded-lg p-6 mb-4">
+                <h3 class="text-xl font-bold text-white mb-3">⚡ Sincronizzazione Rapida</h3>
+                <p class="text-white opacity-90 mb-4">
+                    Sincronizza <strong>pagamenti E lezioni</strong> con un solo click! (Step 1 + Step 2)
+                </p>
+                <button
+                    id="syncAllBtn"
+                    onclick="syncAll()"
+                    class="bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-lg transition"
+                >
+                    🚀 Sincronizza Tutto (Pagamenti + Lezioni)
+                </button>
+                <div id="allOutput" class="mt-4 hidden">
+                    <div class="bg-white border-l-4 p-4 rounded"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Step 1: Aggiorna Pagamenti -->
@@ -100,6 +120,49 @@
     </div>
 
     <script>
+        async function syncAll() {
+            const btn = document.getElementById('syncAllBtn');
+            const output = document.getElementById('allOutput');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sincronizzazione in corso... (può richiedere alcuni minuti)';
+            output.classList.remove('hidden');
+            output.querySelector('div').innerHTML = '<p class="text-gray-600">🔄 Sincronizzando pagamenti e lezioni...</p>';
+            output.querySelector('div').className = 'bg-blue-100 border-l-4 border-blue-500 p-4 rounded';
+
+            try {
+                const response = await fetch('/api/sync_all', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-green-700">✅ ${data.message}</p>
+                        <pre class="mt-2 text-sm overflow-x-auto whitespace-pre-wrap">${data.output}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-green-100 border-l-4 border-green-500 p-4 rounded';
+                } else {
+                    output.querySelector('div').innerHTML = `
+                        <p class="font-bold text-red-700">❌ Sincronizzazione con errori</p>
+                        <pre class="mt-2 text-sm overflow-x-auto whitespace-pre-wrap">${data.error || data.output}</pre>
+                    `;
+                    output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+                }
+            } catch (error) {
+                output.querySelector('div').innerHTML = `
+                    <p class="font-bold text-red-700">❌ Errore di connessione</p>
+                    <p class="mt-2 text-sm">${error.message}</p>
+                `;
+                output.querySelector('div').className = 'bg-red-100 border-l-4 border-red-500 p-4 rounded';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Sincronizza Tutto (Pagamenti + Lezioni)';
+            }
+        }
+
         async function syncPayments() {
             const btn = document.getElementById('syncPaymentsBtn');
             const output = document.getElementById('paymentsOutput');
