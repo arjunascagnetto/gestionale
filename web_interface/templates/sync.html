@@ -1,28 +1,23 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sincronizzazione Dati - Gestionale Lezioni</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50">
-    <!-- Navbar -->
-    <nav class="bg-blue-600 text-white p-4 shadow-lg">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold">📊 Sincronizzazione Dati</h1>
-            <div class="space-x-4">
-                <a href="/" class="hover:underline">🏠 Home</a>
-                <a href="/approva_paganti" class="hover:underline">✅ Approva Paganti</a>
-                <a href="/normalizza" class="hover:underline">✏️ Normalizza</a>
-                <a href="/rifiutati" class="hover:underline">🚫 Rifiutati</a>
-                <a href="/stats" class="hover:underline">📈 Statistiche</a>
-                <a href="/sync" class="hover:underline font-bold">🔄 Sync</a>
+{% extends "base.html" %}
+{% block title %}Sincronizzazione Dati{% endblock %}
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-blue-600 text-white rounded-xl shadow p-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold">🔄 Sincronizzazione Dati</h1>
+                <p class="text-blue-100 text-sm max-w-2xl">
+                    Aggiorna pagamenti, lezioni e Google Calendar mantenendo il flusso coerente.
+                </p>
+            </div>
+            <div class="text-sm text-blue-50">
+                Ordine consigliato:<br>
+                <strong>1) Pagamenti → 2) Lezioni → 3) Aggiorna Calendar</strong>
             </div>
         </div>
-    </nav>
+    </div>
 
-    <div class="container mx-auto p-6">
+    <div class="space-y-6">
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
             <h2 class="text-2xl font-bold mb-4">🔄 Sincronizzazione Dati</h2>
             <p class="text-gray-600 mb-4">
@@ -118,8 +113,10 @@
             </ul>
         </div>
     </div>
-
-    <script>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
         async function syncAll() {
             const btn = document.getElementById('syncAllBtn');
             const output = document.getElementById('allOutput');
@@ -292,5 +289,4 @@
             }
         }
     </script>
-</body>
-</html>
+{% endblock %}

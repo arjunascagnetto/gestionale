@@ -393,24 +393,27 @@ def index():
     all_studenti = get_all_studenti()
     all_paganti = get_all_paganti()
 
-    return render_template('index.html',
-                          lessons=lessons,
-                          payments=payments,
-                          suggestions=suggestions,
-                          abbinamenti=abbinamenti,
-                          lesson_order=lesson_order,
-                          payment_order=payment_order,
-                          all_studenti=all_studenti,
-                          all_paganti=all_paganti,
-                          filter_studenti=filter_studenti or [],
-                          filter_paganti=filter_paganti or [],
-                          hide_paid_lessons=hide_paid_lessons,
-                          hide_used_payments=hide_used_payments,
-                          filter_month=filter_month,
-                          filter_year=filter_year,
-                          all_time=all_time,
-                          current_month=today.month,
-                          current_year=today.year)
+    return render_template(
+        'index.html',
+        lessons=lessons,
+        payments=payments,
+        suggestions=suggestions,
+        abbinamenti=abbinamenti,
+        lesson_order=lesson_order,
+        payment_order=payment_order,
+        all_studenti=all_studenti,
+        all_paganti=all_paganti,
+        filter_studenti=filter_studenti or [],
+        filter_paganti=filter_paganti or [],
+        hide_paid_lessons=hide_paid_lessons,
+        hide_used_payments=hide_used_payments,
+        filter_month=filter_month,
+        filter_year=filter_year,
+        all_time=all_time,
+        current_month=today.month,
+        current_year=today.year,
+        active_page='home'
+    )
 
 
 @app.route('/abbina', methods=['POST'])
@@ -818,7 +821,7 @@ def stats():
         selected_year = today.year
 
     stats_data = calculate_statistics(selected_month, selected_year)
-    return render_template('stats.html', stats=stats_data)
+    return render_template('stats.html', stats=stats_data, active_page='stats')
 
 
 @app.route('/rifiutati')
@@ -865,7 +868,7 @@ def rifiutati():
         })
 
     conn.close()
-    return render_template('rifiutati.html', rifiutati=rifiutati_list)
+    return render_template('rifiutati.html', rifiutati=rifiutati_list, active_page='rifiutati')
 
 
 @app.route('/delete_rifiutato/<int:rifiutato_id>', methods=['POST'])
@@ -941,10 +944,13 @@ def normalizza():
 
     conn.close()
 
-    return render_template('normalizza.html',
-                          name_groups=name_groups,
-                          paid_lessons_count=paid_lessons_count,
-                          total_lessons_count=total_lessons_count)
+    return render_template(
+        'normalizza.html',
+        name_groups=name_groups,
+        paid_lessons_count=paid_lessons_count,
+        total_lessons_count=total_lessons_count,
+        active_page='normalizza'
+    )
 
 
 @app.route('/api/normalize_names', methods=['POST'])
@@ -1180,10 +1186,13 @@ def approva_paganti():
 
     conn.close()
 
-    return render_template('approva_paganti.html',
-                          pending_payments=pending_payments,
-                          rejected_payments=rejected_payments,
-                          paganti_count=paganti_count)
+    return render_template(
+        'approva_paganti.html',
+        pending_payments=pending_payments,
+        rejected_payments=rejected_payments,
+        paganti_count=paganti_count,
+        active_page='approva'
+    )
 
 
 @app.route('/api/approve_pagante', methods=['POST'])
@@ -1299,7 +1308,7 @@ def api_restore_rejected(payment_id):
 @app.route('/sync')
 def sync():
     """Pagina per sincronizzazione dati."""
-    return render_template('sync.html')
+    return render_template('sync.html', active_page='sync')
 
 
 @app.route('/api/sync_all', methods=['POST'])

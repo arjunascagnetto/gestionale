@@ -1,32 +1,12 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Normalizzazione e Calendario</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 p-6">
-    <div class="max-w-7xl mx-auto">
-        <div class="flex justify-between items-center mb-6">
+{% extends "base.html" %}
+{% block title %}Normalizzazione e Calendario{% endblock %}
+{% block content %}
+<div class="space-y-6">
+        <div class="flex justify-between items-center flex-wrap gap-3">
             <h1 class="text-3xl font-bold">🔧 Normalizzazione e Google Calendar</h1>
-            <div class="flex gap-3">
-                <a href="/" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-                    🏠 Home
-                </a>
-                <a href="/normalizza" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">
-                    🔧 Normalizza
-                </a>
-                <a href="/rifiutati" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-                    🚫 Rifiutati
-                </a>
-                <a href="/stats" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
-                    📈 Statistiche
-                </a>
-                <a href="/sync" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-                    🔄 Sync
-                </a>
-            </div>
+            <p class="text-sm text-slate-600 max-w-xl">
+                Uniforma i nomi, aggiorna le associazioni pagante→studente e sincronizza il calendario con una sola interfaccia coerente.
+            </p>
         </div>
 
         <!-- Sezione 1: Normalizzazione Nomi -->
@@ -191,8 +171,9 @@
             </div>
         </div>
     </div>
-
-    <script>
+{% endblock %}
+{% block scripts %}
+<script>
         // Carica associazioni all'avvio
         document.addEventListener('DOMContentLoaded', function() {
             loadAssociations();
@@ -433,5 +414,4 @@
             });
         }
     </script>
-</body>
-</html>
+{% endblock %}

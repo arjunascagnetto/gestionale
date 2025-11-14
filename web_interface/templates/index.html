@@ -1,59 +1,75 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestione Storico Pagamenti</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Stile default: bordo verde, sfondo bianco */
-        .lesson-item { @apply border-l-4 border-green-500 bg-white; }
-        .payment-item { @apply border-l-4 border-green-500 bg-white; }
+{% extends "base.html" %}
+{% block title %}Gestione Storico Pagamenti{% endblock %}
+{% block head_extra %}
+<style>
+    .lesson-item,
+    .payment-item {
+        border-left: 4px solid #22c55e;
+        background-color: #ffffff;
+        border-radius: 0.5rem;
+        transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+    }
 
-        /* Stile quando già abbinato: bordo grigio scuro, sfondo grigio chiaro */
-        .lesson-item.abbinato { @apply border-gray-600 bg-gray-200; }
-        .payment-item.abbinato { @apply border-blue-600 bg-blue-100; }
+    .lesson-item.abbinato {
+        border-color: #475569;
+        background-color: #e2e8f0;
+    }
 
-        /* Stile quando completamente usato (residuo = 0) */
-        .payment-item.completamente-usato { @apply border-gray-600 bg-gray-200 opacity-75; }
+    .payment-item.abbinato {
+        border-color: #2563eb;
+        background-color: #dbeafe;
+    }
 
-        /* Stile quando selezionato (checkbox): bordo blu, sfondo blu chiaro */
-        .lesson-item.selected { @apply border-blue-500 bg-blue-50; }
-        .payment-item.selected { @apply border-blue-500 bg-blue-50; }
+    .payment-item.completamente-usato {
+        border-color: #475569;
+        background-color: #e5e7eb;
+        opacity: 0.75;
+    }
 
-        /* Abbinamenti completati */
-        .abbinamento-item { @apply border-l-4 border-gray-400 bg-gray-100; }
+    .lesson-item.selected,
+    .payment-item.selected {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+    }
 
-        /* Suggerimenti */
-        .suggestion-item { @apply border-l-4 border-yellow-400 bg-yellow-50; }
+    .abbinamento-item {
+        border-left: 4px solid #94a3b8;
+        background-color: #f3f4f6;
+        border-radius: 0.5rem;
+    }
 
-        /* Hover */
-        .lesson-item:hover, .payment-item:hover {
-            @apply opacity-80;
-        }
+    .suggestion-item {
+        border-left: 4px solid #fbbf24;
+        background-color: #fef3c7;
+        border-radius: 0.5rem;
+    }
 
-        /* Loading overlay */
-        #loading-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 9999;
-        }
+    .lesson-item:hover,
+    .payment-item:hover {
+        opacity: 0.85;
+    }
 
-        #loading-overlay.show {
-            display: flex;
-        }
-    </style>
-</head>
-<body class="bg-gray-50 p-6">
-    <div class="max-w-7xl mx-auto">
-        <div class="flex justify-between items-center mb-6">
+    #loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+    }
+
+    #loading-overlay.show {
+        display: flex;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto">
+        <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
             <h1 class="text-3xl font-bold">📊 Gestione Storico Pagamenti e Lezioni</h1>
-            <div class="flex gap-3 items-center">
+            <div class="flex flex-wrap gap-3 items-center">
                 <!-- Filtro Mese/Anno -->
                 <div class="flex items-center gap-2 bg-white px-4 py-2 rounded shadow">
                     <label class="text-sm font-semibold">📅</label>
@@ -75,24 +91,6 @@
                     </label>
                     <button onclick="applyFilters()" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">✓</button>
                 </div>
-                <a href="/" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-                    🏠 Home
-                </a>
-                <a href="/approva_paganti" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">
-                    ✅ Approva Paganti
-                </a>
-                <a href="/normalizza" class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">
-                    🔧 Normalizza
-                </a>
-                <a href="/rifiutati" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-                    🚫 Rifiutati
-                </a>
-                <a href="/stats" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
-                    📈 Statistiche
-                </a>
-                <a href="/sync" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-                    🔄 Sync
-                </a>
             </div>
         </div>
 
@@ -463,8 +461,9 @@
             {% endif %}
         </div>
     </div>
-
-    <script>
+{% endblock %}
+{% block scripts %}
+<script>
         function toggleGratis(checkbox, lessonId) {
             const isGratis = checkbox.checked;
 
@@ -1016,5 +1015,4 @@
         togglePaymentFilter();
         {% endif %}
     </script>
-</body>
-</html>
+{% endblock %}
