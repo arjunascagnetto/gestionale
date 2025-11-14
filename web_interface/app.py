@@ -5,12 +5,14 @@ Flask app per abbinare manualmente pagamenti storici a lezioni.
 """
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 DB_PATH = Path(__file__).parent.parent / "pagamenti.db"
 DEFAULT_LESSON_COST = 2000
+MIN_DATA_DATE = date(2025, 8, 1)
+MIN_DATA_STR = MIN_DATA_DATE.isoformat()
 
 
 def get_db():
@@ -35,10 +37,11 @@ def get_student_default_cost(nome_studente, conn=None):
             AND costo IS NOT NULL
             AND costo > 0
             AND gratis = 0
+            AND giorno >= ?
         GROUP BY costo
         ORDER BY cnt DESC, last_date DESC
         LIMIT 1
-    ''', (nome_studente,))
+    ''', (nome_studente, MIN_DATA_STR))
     row = cursor.fetchone()
 
     if own_conn:
@@ -77,8 +80,8 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
     '''
 
     # Aggiungi filtro studenti se specificato
-    where_clauses = []
-    params = []
+    where_clauses = ['l.giorno >= ?']
+    params = [MIN_DATA_STR]
 
     if filter_studenti and len(filter_studenti) > 0:
         placeholders = ','.join(['?' for _ in filter_studenti])
@@ -174,11 +177,8 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
     '''
 
     # Aggiungi filtro paganti se specificato
-    where_clauses = []
-    params = []
-
-    # Escludi sempre pagamenti rifiutati
-    where_clauses.append("p.stato != 'rejected'")
+    where_clauses = ["p.stato != 'rejected'", 'p.giorno >= ?']
+    params = [MIN_DATA_STR]
 
     if filter_paganti and len(filter_paganti) > 0:
         placeholders = ','.join(['?' for _ in filter_paganti])
@@ -245,8 +245,9 @@ def get_existing_abbinamenti():
         FROM pagamenti_lezioni pl
         JOIN lezioni l ON pl.lezione_id = l.id_lezione
         JOIN pagamenti p ON pl.pagamento_id = p.id_pagamento
+        WHERE l.giorno >= ?
         ORDER BY pl.id DESC
-    ''')
+    ''', (MIN_DATA_STR,))
 
     abbinamenti = []
     for row in cursor.fetchall():
@@ -270,8 +271,9 @@ def get_all_studenti():
     cursor.execute('''
         SELECT DISTINCT nome_studente
         FROM lezioni
+        WHERE giorno >= ?
         ORDER BY nome_studente ASC
-    ''')
+    ''', (MIN_DATA_STR,))
 
     studenti = [row['nome_studente'] for row in cursor.fetchall()]
     conn.close()
@@ -286,8 +288,9 @@ def get_all_paganti():
     cursor.execute('''
         SELECT DISTINCT nome_pagante
         FROM pagamenti
+        WHERE giorno >= ?
         ORDER BY nome_pagante ASC
-    ''')
+    ''', (MIN_DATA_STR,))
 
     paganti = [row['nome_pagante'] for row in cursor.fetchall()]
     conn.close()
@@ -340,6 +343,8 @@ def get_suggested_abbinamenti():
         WHERE p.stato IN ('sospeso', 'archivio')
             AND l.gratis = 0
             AND sr.id IS NULL
+            AND l.giorno >= ?
+            AND p.giorno >= ?
         GROUP BY l.id_lezione, p.id_pagamento
         HAVING
             da_pagare > 0
@@ -349,7 +354,7 @@ def get_suggested_abbinamenti():
             giorni_distanza ASC,
             l.giorno DESC
         LIMIT 20
-    ''')
+    ''', (MIN_DATA_STR, MIN_DATA_STR))
 
     suggestions = []
     for row in cursor.fetchall():
@@ -435,10 +440,6 @@ def index():
     payments = get_available_payments(payment_order, filter_paganti, hide_used_payments, month_filter)
     suggestions = get_suggested_abbinamenti()
 
-    # Ottieni liste complete per i filtri
-    all_studenti = get_all_studenti()
-    all_paganti = get_all_paganti()
-
     return render_template(
         'index.html',
         lessons=lessons,
@@ -446,8 +447,6 @@ def index():
         suggestions=suggestions,
         lesson_order=lesson_order,
         payment_order=payment_order,
-        all_studenti=all_studenti,
-        all_paganti=all_paganti,
         filter_studenti=filter_studenti or [],
         filter_paganti=filter_paganti or [],
         hide_paid_lessons=hide_paid_lessons,
@@ -950,8 +949,9 @@ def rifiutati():
         FROM suggerimenti_rifiutati sr
         JOIN lezioni l ON sr.lezione_id = l.id_lezione
         JOIN pagamenti p ON sr.pagamento_id = p.id_pagamento
+        WHERE l.giorno >= ?
         ORDER BY sr.rifiutato_at DESC
-    ''')
+    ''', (MIN_DATA_STR,))
 
     rifiutati_list = []
     for row in cursor.fetchall():
@@ -1000,7 +1000,7 @@ def normalizza():
     cursor = conn.cursor()
 
     # Analizza varianti di nomi (stessa logica di normalize_student_names.py)
-    cursor.execute('SELECT DISTINCT nome_studente FROM lezioni ORDER BY nome_studente')
+    cursor.execute('SELECT DISTINCT nome_studente FROM lezioni WHERE giorno >= ? ORDER BY nome_studente', (MIN_DATA_STR,))
     all_students = [row[0] for row in cursor.fetchall()]
 
     # Raggruppa nomi simili
@@ -1022,8 +1022,8 @@ def normalizza():
                     SELECT COUNT(*)
                     FROM pagamenti_lezioni pl
                     JOIN lezioni l ON pl.lezione_id = l.id_lezione
-                    WHERE l.nome_studente = ?
-                ''', (variant,))
+                    WHERE l.nome_studente = ? AND l.giorno >= ?
+                ''', (variant, MIN_DATA_STR))
                 frequency[variant] = cursor.fetchone()[0]
 
             # Scegli canonico (più frequente, poi più lungo)
@@ -1043,12 +1043,13 @@ def normalizza():
         LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
         WHERE l.nextcloud_event_id IS NOT NULL
             AND l.gratis = 0
+            AND l.giorno >= ?
         GROUP BY l.id_lezione
         HAVING COALESCE(SUM(pl.quota_usata), 0) >= l.costo
-    ''')
+    ''', (MIN_DATA_STR,))
     paid_lessons_count = len(cursor.fetchall())
 
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE nextcloud_event_id IS NOT NULL')
+    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE nextcloud_event_id IS NOT NULL AND giorno >= ?', (MIN_DATA_STR,))
     total_lessons_count = cursor.fetchone()[0]
 
     conn.close()
@@ -1247,9 +1248,9 @@ def approva_paganti():
             valuta,
             created_at
         FROM pagamenti
-        WHERE stato = 'pending_approval'
+        WHERE stato = 'pending_approval' AND giorno >= ?
         ORDER BY giorno DESC, ora DESC
-    ''')
+    ''', (MIN_DATA_STR,))
 
     pending_payments = []
     for row in cursor.fetchall():
@@ -1279,10 +1280,10 @@ def approva_paganti():
             somma,
             valuta
         FROM pagamenti
-        WHERE stato = 'rejected'
+        WHERE stato = 'rejected' AND giorno >= ?
         ORDER BY giorno DESC, ora DESC
         LIMIT 50
-    ''')
+    ''', (MIN_DATA_STR,))
 
     rejected_payments = []
     for row in cursor.fetchall():
@@ -1632,6 +1633,7 @@ def calculate_statistics(*_unused, **_unused_kwargs):
 
     def period_stats(start_date, end_date):
         """Restituisce lezioni completate e pagamenti ricevuti fino all'ultima data utile."""
+        start_date = max(start_date, MIN_DATA_DATE)
         effective_end = min(end_date, today)
         if effective_end < start_date:
             return 0, 0, 0, effective_end
@@ -1653,9 +1655,12 @@ def calculate_statistics(*_unused, **_unused_kwargs):
         return lessons_completed, payments_sum, payments_count, effective_end
 
     weeks = []
-    for offset in range(4):
+    offset = 0
+    while len(weeks) < 4:
         start = current_week_start - timedelta(days=7 * offset)
         end = start + timedelta(days=6)
+        if end < MIN_DATA_DATE:
+            break
         lessons_completed, payments_sum, payments_count, data_end = period_stats(start, end)
         if offset == 0:
             title = 'Settimana corrente'
@@ -1663,15 +1668,18 @@ def calculate_statistics(*_unused, **_unused_kwargs):
             title = 'Settimana precedente'
         else:
             title = f'{offset} settimane fa'
+        display_start = max(start, MIN_DATA_DATE)
+        display_end = min(end, today)
         weeks.append({
             'title': title,
-            'range_label': f"{start.strftime('%d/%m')} → {end.strftime('%d/%m')}",
+            'range_label': f"{display_start.strftime('%d/%m')} → {display_end.strftime('%d/%m')}",
             'lessons_completed': lessons_completed,
             'payments_sum': payments_sum,
             'payments_count': payments_count,
             'data_until': data_end.strftime('%d/%m/%Y'),
             'is_current': offset == 0
         })
+        offset += 1
 
     month_names = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -1693,8 +1701,11 @@ def calculate_statistics(*_unused, **_unused_kwargs):
         return start, end, month, year
 
     months = []
-    for offset in range(4):
+    offset = 0
+    while len(months) < 4:
         start, end, month, year = month_range(offset)
+        if end < MIN_DATA_DATE:
+            break
         lessons_completed, payments_sum, payments_count, data_end = period_stats(start, end)
         if offset == 0:
             title = 'Mese corrente'
@@ -1702,16 +1713,19 @@ def calculate_statistics(*_unused, **_unused_kwargs):
             title = 'Mese precedente'
         else:
             title = f'{offset} mesi fa'
+        display_start = max(start, MIN_DATA_DATE)
+        display_end = min(end, today)
         months.append({
             'title': title,
             'label': f"{month_names[month]} {year}",
-            'range_label': f"{start.strftime('%d/%m')} → {end.strftime('%d/%m')}",
+            'range_label': f"{display_start.strftime('%d/%m')} → {display_end.strftime('%d/%m')}",
             'lessons_completed': lessons_completed,
             'payments_sum': payments_sum,
             'payments_count': payments_count,
             'data_until': data_end.strftime('%d/%m/%Y'),
             'is_current': offset == 0
         })
+        offset += 1
 
     conn.close()
 

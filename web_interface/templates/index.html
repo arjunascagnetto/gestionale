@@ -88,7 +88,7 @@
                         {% endfor %}
                     </select>
                     <select id="year-select" class="border rounded px-2 py-1 text-sm">
-                        {% for y in range(2024, current_year + 2) %}
+                        {% for y in range(2025, current_year + 2) %}
                         <option value="{{ y }}" {% if y == current_year and not all_time %}selected{% endif %}>{{ y }}</option>
                         {% endfor %}
                     </select>
