@@ -70,6 +70,13 @@
         <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
             <h1 class="text-3xl font-bold">📊 Gestione Storico Pagamenti e Lezioni</h1>
             <div class="flex flex-wrap gap-3 items-center">
+                <div class="flex items-center gap-3 bg-white px-4 py-2 rounded shadow">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" id="hide-completed-checkbox" {% if hide_paid_lessons and hide_used_payments %}checked{% endif %}>
+                        <span>🙈 Nascondi lezioni e pagamenti completati</span>
+                    </label>
+                    <button onclick="applyFilters()" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">✓</button>
+                </div>
                 <!-- Filtro Mese/Anno -->
                 <div class="flex items-center gap-2 bg-white px-4 py-2 rounded shadow">
                     <label class="text-sm font-semibold">📅</label>
@@ -109,44 +116,6 @@
                            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
                             ↓ Data
                         </a>
-                    </div>
-                </div>
-
-                <!-- Filtro Studenti -->
-                <div class="mb-4 p-3 bg-gray-50 rounded border border-gray-200">
-                    <div class="flex justify-between items-center mb-2">
-                        <h3 class="font-semibold text-sm">🔍 Filtra per Studente</h3>
-                        <button onclick="toggleStudentFilter()"
-                                class="text-xs text-blue-600 hover:text-blue-800">
-                            <span id="student-filter-toggle">▼ Mostra</span>
-                        </button>
-                    </div>
-                    <div id="student-filter-list" class="hidden max-h-40 overflow-y-auto space-y-1">
-                        {% for studente in all_studenti %}
-                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            <input type="checkbox"
-                                   class="student-filter-checkbox"
-                                   value="{{ studente }}"
-                                   {% if studente in filter_studenti %}checked{% endif %}>
-                            <span>{{ studente }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <div class="mt-2">
-                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            <input type="checkbox" id="hide-paid-checkbox" {% if hide_paid_lessons %}checked{% endif %}>
-                            <span>👻 Nascondi lezioni pagate</span>
-                        </label>
-                    </div>
-                    <div class="mt-2 flex gap-2">
-                        <button onclick="applyFilters()"
-                                class="flex-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
-                            ✓ Applica Filtri
-                        </button>
-                        <button onclick="clearStudentFilters()"
-                                class="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400">
-                            ✗ Reset
-                        </button>
                     </div>
                 </div>
 
@@ -237,43 +206,6 @@
                     </div>
                 </div>
 
-                <!-- Filtro Paganti -->
-                <div class="mb-4 p-3 bg-gray-50 rounded border border-gray-200">
-                    <div class="flex justify-between items-center mb-2">
-                        <h3 class="font-semibold text-sm">🔍 Filtra per Pagante</h3>
-                        <button onclick="togglePaymentFilter()"
-                                class="text-xs text-blue-600 hover:text-blue-800">
-                            <span id="payment-filter-toggle">▼ Mostra</span>
-                        </button>
-                    </div>
-                    <div id="payment-filter-list" class="hidden max-h-40 overflow-y-auto space-y-1">
-                        {% for pagante in all_paganti %}
-                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            <input type="checkbox"
-                                   class="payment-filter-checkbox"
-                                   value="{{ pagante }}"
-                                   {% if pagante in filter_paganti %}checked{% endif %}>
-                            <span>{{ pagante }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <div class="mt-2">
-                        <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            <input type="checkbox" id="hide-used-checkbox" {% if hide_used_payments %}checked{% endif %}>
-                            <span>👻 Nascondi pagamenti usati</span>
-                        </label>
-                    </div>
-                    <div class="mt-2 flex gap-2">
-                        <button onclick="applyFilters()"
-                                class="flex-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
-                            ✓ Applica Filtri
-                        </button>
-                        <button onclick="clearPaymentFilters()"
-                                class="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400">
-                            ✗ Reset
-                        </button>
-                    </div>
-                </div>
 
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="payments-list">
                     {% for payment in payments %}
@@ -900,44 +832,8 @@
 
         // ===== FILTRI =====
 
-        function toggleStudentFilter() {
-            const filterList = document.getElementById('student-filter-list');
-            const toggleText = document.getElementById('student-filter-toggle');
-
-            if (filterList.classList.contains('hidden')) {
-                filterList.classList.remove('hidden');
-                toggleText.textContent = '▲ Nascondi';
-            } else {
-                filterList.classList.add('hidden');
-                toggleText.textContent = '▼ Mostra';
-            }
-        }
-
-        function togglePaymentFilter() {
-            const filterList = document.getElementById('payment-filter-list');
-            const toggleText = document.getElementById('payment-filter-toggle');
-
-            if (filterList.classList.contains('hidden')) {
-                filterList.classList.remove('hidden');
-                toggleText.textContent = '▲ Nascondi';
-            } else {
-                filterList.classList.add('hidden');
-                toggleText.textContent = '▼ Mostra';
-            }
-        }
-
         function applyFilters() {
-            // Ottieni studenti selezionati
-            const studentCheckboxes = document.querySelectorAll('.student-filter-checkbox:checked');
-            const selectedStudents = Array.from(studentCheckboxes).map(cb => cb.value);
-
-            // Ottieni paganti selezionati
-            const paymentCheckboxes = document.querySelectorAll('.payment-filter-checkbox:checked');
-            const selectedPaganti = Array.from(paymentCheckboxes).map(cb => cb.value);
-
-            // Ottieni checkbox hide
-            const hidePaid = document.getElementById('hide-paid-checkbox').checked;
-            const hideUsed = document.getElementById('hide-used-checkbox').checked;
+            const hideCompleted = document.getElementById('hide-completed-checkbox').checked;
 
             // Ottieni filtro mese/anno
             const allTime = document.getElementById('all-time-checkbox').checked;
@@ -951,19 +847,9 @@
             params.set('lesson_order', '{{ lesson_order }}');
             params.set('payment_order', '{{ payment_order }}');
 
-            // Aggiungi filtri studenti
-            selectedStudents.forEach(studente => {
-                params.append('studenti', studente);
-            });
-
-            // Aggiungi filtri paganti
-            selectedPaganti.forEach(pagante => {
-                params.append('paganti', pagante);
-            });
-
-            // Aggiungi parametri hide
-            if (hidePaid) params.set('hide_paid', '1');
-            if (hideUsed) params.set('hide_used', '1');
+            // Imposta opzioni visibilità completati
+            params.set('hide_paid', hideCompleted ? '1' : '0');
+            params.set('hide_used', hideCompleted ? '1' : '0');
 
             // Aggiungi filtro mese/anno
             if (allTime) {
@@ -977,36 +863,7 @@
             window.location.href = '/?' + params.toString();
         }
 
-        function clearStudentFilters() {
-            // Deselezione tutti i checkbox studenti
-            document.querySelectorAll('.student-filter-checkbox').forEach(cb => {
-                cb.checked = false;
-            });
-
-            // Applica filtri (che saranno vuoti, quindi mostra tutto)
-            applyFilters();
-        }
-
-        function clearPaymentFilters() {
-            // Deselezione tutti i checkbox paganti
-            document.querySelectorAll('.payment-filter-checkbox').forEach(cb => {
-                cb.checked = false;
-            });
-
-            // Applica filtri (che saranno vuoti, quindi mostra tutto)
-            applyFilters();
-        }
-
         // Inizializza al caricamento
         updateTotals();
-
-        // Auto-espandi filtri se sono attivi
-        {% if filter_studenti|length > 0 %}
-        toggleStudentFilter();
-        {% endif %}
-
-        {% if filter_paganti|length > 0 %}
-        togglePaymentFilter();
-        {% endif %}
     </script>
 {% endblock %}

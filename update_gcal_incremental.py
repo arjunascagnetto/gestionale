@@ -138,10 +138,10 @@ def get_modified_lessons(db_path, since_timestamp):
         '''
         cursor.execute(query, (start_date, oggi, since_timestamp.isoformat()))
         print(f"\n🔍 Ricerca lezioni modificate dopo {since_timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"   Range date: {start_date} → {oggi} (da agosto 2024 a oggi, no futuro)")
+        print(f"   Range date: {start_date} → {oggi} (da agosto 2025 a oggi, no futuro)")
     else:
-        # Prima esecuzione: processa tutte le lezioni da agosto 2024 a oggi
-        start_date = '2024-08-01'
+        # Prima esecuzione: processa tutte le lezioni da agosto 2025 a oggi
+        start_date = '2025-08-01'
 
         query = '''
             SELECT

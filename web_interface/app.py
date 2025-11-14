@@ -10,6 +10,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 DB_PATH = Path(__file__).parent.parent / "pagamenti.db"
+DEFAULT_LESSON_COST = 2000
 
 
 def get_db():
@@ -17,6 +18,33 @@ def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_student_default_cost(nome_studente, conn=None):
+    """Calcola il costo più probabile per uno studente basandosi sullo storico."""
+    own_conn = False
+    if conn is None:
+        conn = get_db()
+        own_conn = True
+
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT costo, COUNT(*) as cnt, MAX(giorno) as last_date
+        FROM lezioni
+        WHERE nome_studente = ?
+            AND costo IS NOT NULL
+            AND costo > 0
+            AND gratis = 0
+        GROUP BY costo
+        ORDER BY cnt DESC, last_date DESC
+        LIMIT 1
+    ''', (nome_studente,))
+    row = cursor.fetchone()
+
+    if own_conn:
+        conn.close()
+
+    return row['costo'] if row else None
 
 
 def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None):
@@ -75,20 +103,40 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
     query += f' ORDER BY l.giorno {order}, l.ora {order}'
 
     cursor.execute(query, params)
+    rows = cursor.fetchall()
 
     lessons = []
-    for row in cursor.fetchall():
+    updates = []
+    for row in rows:
+        costo = row['costo']
+        if row['gratis']:
+            costo = costo or 0
+        else:
+            if costo is None or costo <= 0:
+                suggested = get_student_default_cost(row['nome_studente'], conn)
+                if suggested:
+                    costo = suggested
+                    updates.append((costo, row['id_lezione']))
+                else:
+                    costo = DEFAULT_LESSON_COST
+                    updates.append((costo, row['id_lezione']))
+
         lessons.append({
             'id': row['id_lezione'],
             'studente': row['nome_studente'],
             'giorno': row['giorno'],
             'ora': row['ora'],
-            'costo': row['costo'],
+            'costo': costo,
             'gratis': row['gratis'],
             'is_abbinata': row['is_abbinata'],
             'quota_pagata': row['quota_pagata'],
             'is_completamente_pagata': row['is_completamente_pagata']
         })
+
+    if updates:
+        update_cursor = conn.cursor()
+        update_cursor.executemany('UPDATE lezioni SET costo = ? WHERE id_lezione = ?', updates)
+        conn.commit()
 
     conn.close()
     return lessons
@@ -370,8 +418,8 @@ def index():
         filter_paganti = None
 
     # Filtri per nascondere lezioni/pagamenti completati
-    hide_paid_lessons = request.args.get('hide_paid', '0') == '1'
-    hide_used_payments = request.args.get('hide_used', '0') == '1'
+    hide_paid_lessons = request.args.get('hide_paid', '1') == '1'
+    hide_used_payments = request.args.get('hide_used', '1') == '1'
 
     # Filtro mese/anno - default: mese corrente
     from datetime import datetime
@@ -441,7 +489,7 @@ def abbina():
                 continue
 
             studente = studente_row['nome_studente']
-            costo_lezione = studente_row['costo'] or 2000  # Default se NULL
+            costo_lezione = studente_row['costo'] or DEFAULT_LESSON_COST  # Default se NULL
 
             quota_residua = costo_lezione
 
