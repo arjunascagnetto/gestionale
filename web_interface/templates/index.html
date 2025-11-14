@@ -202,6 +202,10 @@
                                                onchange="toggleGratis(this, {{ lesson.id }})">
                                         <span class="text-xs text-purple-600 font-medium">Lezione di prova (gratis)</span>
                                     </label>
+                                    <button class="ml-auto px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                            onclick="deleteLesson({{ lesson.id }}); event.stopPropagation();">
+                                        🗑️ Cancella lezione
+                                    </button>
                                 </div>
                             </div>
                         </label>
@@ -428,38 +432,6 @@
             {% endif %}
         </div>
 
-        <!-- Abbinamenti Esistenti -->
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <h2 class="text-xl font-bold mb-4">📊 ABBINAMENTI COMPLETATI</h2>
-
-            {% if abbinamenti %}
-            <div class="space-y-2">
-                {% for abb in abbinamenti %}
-                <div class="abbinamento-item p-3 rounded flex justify-between items-center">
-                    <div class="flex-1 grid grid-cols-2 gap-4">
-                        <div>
-                            <div class="font-semibold">Lezione:</div>
-                            <div class="text-sm">{{ abb.lezione }}</div>
-                        </div>
-                        <div>
-                            <div class="font-semibold">Pagamento:</div>
-                            <div class="text-sm">{{ abb.pagamento }} → {{ abb.quota }} {{ abb.valuta }}</div>
-                        </div>
-                    </div>
-                    <form action="/delete/{{ abb.id }}" method="POST"
-                          onsubmit="return confirm('Eliminare questo abbinamento?')">
-                        <button type="submit"
-                                class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">
-                            🗑️ Elimina
-                        </button>
-                    </form>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="text-gray-500 text-center py-8">Nessun abbinamento esistente</p>
-            {% endif %}
-        </div>
     </div>
 {% endblock %}
 {% block scripts %}
@@ -861,6 +833,28 @@
             })
             .catch(error => {
                 document.getElementById('loading-overlay').classList.remove('show');
+                console.error('Errore:', error);
+                alert('Errore di connessione');
+            });
+        }
+
+        function deleteLesson(lessonId) {
+            if (!confirm('Eliminare definitivamente questa lezione e i suoi abbinamenti?')) {
+                return;
+            }
+
+            fetch(`/delete_lesson/${lessonId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Errore durante l\'eliminazione: ' + (data.error || 'Errore sconosciuto'));
+                }
+            })
+            .catch(error => {
                 console.error('Errore:', error);
                 alert('Errore di connessione');
             });

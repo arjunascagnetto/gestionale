@@ -7,7 +7,6 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, jsonify
-import calendar
 
 app = Flask(__name__)
 DB_PATH = Path(__file__).parent.parent / "pagamenti.db"
@@ -387,7 +386,6 @@ def index():
     lessons = get_unassigned_lessons(lesson_order, filter_studenti, hide_paid_lessons, month_filter)
     payments = get_available_payments(payment_order, filter_paganti, hide_used_payments, month_filter)
     suggestions = get_suggested_abbinamenti()
-    abbinamenti = get_existing_abbinamenti()
 
     # Ottieni liste complete per i filtri
     all_studenti = get_all_studenti()
@@ -398,7 +396,6 @@ def index():
         lessons=lessons,
         payments=payments,
         suggestions=suggestions,
-        abbinamenti=abbinamenti,
         lesson_order=lesson_order,
         payment_order=payment_order,
         all_studenti=all_studenti,
@@ -777,6 +774,46 @@ def delete_lesson_abbinamenti(lesson_id):
         conn.close()
 
 
+@app.route('/delete_lesson/<int:lesson_id>', methods=['POST'])
+def delete_lesson(lesson_id):
+    """Elimina una lezione e i suoi abbinamenti."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # Rimuovi abbinamenti collegati alla lezione
+        cursor.execute('DELETE FROM pagamenti_lezioni WHERE lezione_id = ?', (lesson_id,))
+
+        # Elimina la lezione stessa
+        cursor.execute('DELETE FROM lezioni WHERE id_lezione = ?', (lesson_id,))
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'Lezione non trovata'}), 404
+
+        # Ripristina stato dei pagamenti che ora hanno residuo
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = 'sospeso'
+            WHERE stato = 'associato'
+            AND id_pagamento IN (
+                SELECT p.id_pagamento
+                FROM pagamenti p
+                LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+                GROUP BY p.id_pagamento
+                HAVING p.somma - COALESCE(SUM(pl.quota_usata), 0) > 0
+            )
+        ''')
+
+        conn.commit()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/delete/<int:abbinamento_id>', methods=['POST'])
 def delete_abbinamento(abbinamento_id):
     """Elimina un abbinamento esistente."""
@@ -809,24 +846,42 @@ def delete_abbinamento(abbinamento_id):
 @app.route('/stats')
 def stats():
     """Pagina statistiche."""
-    # Ottieni mese e anno dai parametri GET (default: mese e anno corrente)
-    selected_month = request.args.get('month', type=int)
-    selected_year = request.args.get('year', type=int)
-
-    # Se non specificati, usa mese e anno corrente
-    today = datetime.now().date()
-    if selected_month is None:
-        selected_month = today.month
-    if selected_year is None:
-        selected_year = today.year
-
-    stats_data = calculate_statistics(selected_month, selected_year)
+    stats_data = calculate_statistics()
     return render_template('stats.html', stats=stats_data, active_page='stats')
+
+
+@app.route('/routines')
+def routines():
+    """Pagina per operazioni ricorrenti (abbinamenti completati e gestione)."""
+    tab = request.args.get('tab', 'abbinamenti')
+
+    abbinamenti = []
+    iframe_src = None
+
+    if tab == 'abbinamenti':
+        abbinamenti = get_existing_abbinamenti()
+    elif tab == 'approva':
+        iframe_src = url_for('approva_paganti', embedded=1)
+    elif tab == 'normalizza':
+        iframe_src = url_for('normalizza', embedded=1)
+    elif tab == 'rifiutati':
+        iframe_src = url_for('rifiutati', embedded=1)
+    else:
+        return redirect(url_for('routines', tab='abbinamenti'))
+
+    return render_template(
+        'routines.html',
+        active_tab=tab,
+        abbinamenti=abbinamenti,
+        iframe_src=iframe_src,
+        active_page='routines'
+    )
 
 
 @app.route('/rifiutati')
 def rifiutati():
     """Pagina con lista abbinamenti rifiutati."""
+    embedded = request.args.get('embedded') == '1'
     conn = get_db()
     cursor = conn.cursor()
 
@@ -868,7 +923,12 @@ def rifiutati():
         })
 
     conn.close()
-    return render_template('rifiutati.html', rifiutati=rifiutati_list, active_page='rifiutati')
+    return render_template(
+        'rifiutati.html',
+        rifiutati=rifiutati_list,
+        active_page=None if embedded else 'rifiutati',
+        embedded=embedded
+    )
 
 
 @app.route('/delete_rifiutato/<int:rifiutato_id>', methods=['POST'])
@@ -887,6 +947,7 @@ def delete_rifiutato(rifiutato_id):
 @app.route('/normalizza')
 def normalizza():
     """Pagina per normalizzazione nomi e aggiornamento Google Calendar."""
+    embedded = request.args.get('embedded') == '1'
     conn = get_db()
     cursor = conn.cursor()
 
@@ -949,7 +1010,8 @@ def normalizza():
         name_groups=name_groups,
         paid_lessons_count=paid_lessons_count,
         total_lessons_count=total_lessons_count,
-        active_page='normalizza'
+        active_page=None if embedded else 'normalizza',
+        embedded=embedded
     )
 
 
@@ -1122,6 +1184,7 @@ def api_delete_association(assoc_id):
 @app.route('/approva_paganti')
 def approva_paganti():
     """Pagina per approvare/rifiutare nuovi paganti."""
+    embedded = request.args.get('embedded') == '1'
     conn = get_db()
     cursor = conn.cursor()
 
@@ -1191,7 +1254,8 @@ def approva_paganti():
         pending_payments=pending_payments,
         rejected_payments=rejected_payments,
         paganti_count=paganti_count,
-        active_page='approva'
+        active_page=None if embedded else 'approva',
+        embedded=embedded
     )
 
 
@@ -1505,288 +1569,108 @@ def api_force_full_calendar_update():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def calculate_statistics(selected_month=None, selected_year=None):
+def calculate_statistics(*_unused, **_unused_kwargs):
     """
-    Calcola tutte le statistiche per la pagina stats.
-
-    Args:
-        selected_month: Mese selezionato (1-12), default: mese corrente
-        selected_year: Anno selezionato, default: anno corrente
+    Calcola statistiche essenziali su lezioni svolte e pagamenti ricevuti
+    per le ultime 4 settimane e gli ultimi 4 mesi (finestra mobile).
     """
     conn = get_db()
     cursor = conn.cursor()
 
-    # Date di riferimento
     today = datetime.now().date()
 
-    # Usa mese/anno selezionato o corrente
-    if selected_month is None:
-        selected_month = today.month
-    if selected_year is None:
-        selected_year = today.year
+    # Periodo settimana corrente (lunedì-domenica)
+    current_week_start = today - timedelta(days=today.weekday())
 
-    week_start = today - timedelta(days=today.weekday())  # Lunedì di questa settimana
-    week_end = week_start + timedelta(days=6)  # Domenica
+    def period_stats(start_date, end_date):
+        """Restituisce lezioni completate e pagamenti ricevuti fino all'ultima data utile."""
+        effective_end = min(end_date, today)
+        if effective_end < start_date:
+            return 0, 0, 0, effective_end
 
-    # Calcola inizio e fine del mese selezionato
-    month_start = datetime(selected_year, selected_month, 1).date()
-    # Ultimo giorno del mese
-    if selected_month == 12:
-        month_end = datetime(selected_year + 1, 1, 1).date()
-    else:
-        month_end = datetime(selected_year, selected_month + 1, 1).date()
+        cursor.execute(
+            'SELECT COUNT(*) FROM lezioni WHERE giorno BETWEEN ? AND ?',
+            (str(start_date), str(effective_end))
+        )
+        lessons_completed = cursor.fetchone()[0] or 0
 
-    # Numero di giorni nel mese selezionato
-    days_in_month = (month_end - month_start).days
+        cursor.execute(
+            'SELECT COALESCE(SUM(somma), 0), COUNT(*) FROM pagamenti WHERE giorno BETWEEN ? AND ?',
+            (str(start_date), str(effective_end))
+        )
+        payments_sum, payments_count = cursor.fetchone()
+        payments_sum = payments_sum or 0
+        payments_count = payments_count or 0
 
-    # Nome mese in italiano
+        return lessons_completed, payments_sum, payments_count, effective_end
+
+    weeks = []
+    for offset in range(4):
+        start = current_week_start - timedelta(days=7 * offset)
+        end = start + timedelta(days=6)
+        lessons_completed, payments_sum, payments_count, data_end = period_stats(start, end)
+        if offset == 0:
+            title = 'Settimana corrente'
+        elif offset == 1:
+            title = 'Settimana precedente'
+        else:
+            title = f'{offset} settimane fa'
+        weeks.append({
+            'title': title,
+            'range_label': f"{start.strftime('%d/%m')} → {end.strftime('%d/%m')}",
+            'lessons_completed': lessons_completed,
+            'payments_sum': payments_sum,
+            'payments_count': payments_count,
+            'data_until': data_end.strftime('%d/%m/%Y'),
+            'is_current': offset == 0
+        })
+
     month_names = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 
-    # ===== GENERA LISTE PER I DROPDOWN =====
+    def month_range(offset):
+        year = today.year
+        month = today.month
+        for _ in range(offset):
+            month -= 1
+            if month == 0:
+                month = 12
+                year -= 1
+        start = datetime(year, month, 1).date()
+        if month == 12:
+            next_month = datetime(year + 1, 1, 1).date()
+        else:
+            next_month = datetime(year, month + 1, 1).date()
+        end = next_month - timedelta(days=1)
+        return start, end, month, year
 
-    # Lista mesi
-    available_months = [
-        {'value': i, 'label': month_names[i]}
-        for i in range(1, 13)
-    ]
-
-    # Lista anni (da quando ci sono dati nel DB)
-    cursor.execute('''
-        SELECT MIN(SUBSTR(giorno, 1, 4)) as min_year, MAX(SUBSTR(giorno, 1, 4)) as max_year
-        FROM (
-            SELECT giorno FROM pagamenti
-            UNION
-            SELECT giorno FROM lezioni
-        )
-    ''')
-    year_row = cursor.fetchone()
-    min_year = int(year_row[0]) if year_row[0] else today.year
-    max_year = int(year_row[1]) if year_row[1] else today.year
-
-    available_years = list(range(min_year, max_year + 1))
-
-    # ===== LEZIONI =====
-
-    # Lezioni oggi
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno = ?', (str(today),))
-    lessons_today = cursor.fetchone()[0]
-
-    # Lezioni questa settimana
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno BETWEEN ? AND ?',
-                   (str(week_start), str(week_end)))
-    lessons_week = cursor.fetchone()[0]
-
-    # Lezioni nel mese selezionato
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno >= ? AND giorno < ?',
-                   (str(month_start), str(month_end)))
-    lessons_month = cursor.fetchone()[0]
-
-    # Lezioni PASSATE nel mese selezionato (già svolte)
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno >= ? AND giorno < ? AND giorno <= ?',
-                   (str(month_start), str(month_end), str(today)))
-    lessons_month_past = cursor.fetchone()[0]
-
-    # Lezioni FUTURE nel mese selezionato
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno >= ? AND giorno < ? AND giorno > ?',
-                   (str(month_start), str(month_end), str(today)))
-    lessons_month_future = cursor.fetchone()[0]
-
-    # Lezioni PASSATE questa settimana
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno BETWEEN ? AND ? AND giorno <= ?',
-                   (str(week_start), str(week_end), str(today)))
-    lessons_week_past = cursor.fetchone()[0]
-
-    # Lezioni FUTURE questa settimana
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE giorno BETWEEN ? AND ? AND giorno > ?',
-                   (str(week_start), str(week_end), str(today)))
-    lessons_week_future = cursor.fetchone()[0]
-
-    # ===== PAGAMENTI =====
-
-    # Pagamenti oggi
-    cursor.execute('SELECT COALESCE(SUM(somma), 0), COUNT(*) FROM pagamenti WHERE giorno = ?',
-                   (str(today),))
-    row = cursor.fetchone()
-    payments_today = row[0]
-    payments_today_count = row[1]
-
-    # Pagamenti questa settimana
-    cursor.execute('SELECT COALESCE(SUM(somma), 0), COUNT(*) FROM pagamenti WHERE giorno BETWEEN ? AND ?',
-                   (str(week_start), str(week_end)))
-    row = cursor.fetchone()
-    payments_week = row[0]
-    payments_week_count = row[1]
-
-    # Pagamenti nel mese selezionato
-    cursor.execute('SELECT COALESCE(SUM(somma), 0), COUNT(*) FROM pagamenti WHERE giorno >= ? AND giorno < ?',
-                   (str(month_start), str(month_end)))
-    row = cursor.fetchone()
-    payments_month = row[0]
-    payments_month_count = row[1]
-
-    # Media giornaliera del mese
-    payments_month_avg = payments_month / days_in_month if days_in_month > 0 else 0
-
-    # ===== STIME GUADAGNO (basate sui costi delle lezioni) =====
-
-    # Stima guadagno MENSILE (somma dei costi di tutte le lezioni non gratis del mese)
-    cursor.execute('''
-        SELECT COALESCE(SUM(costo), 0)
-        FROM lezioni
-        WHERE giorno >= ? AND giorno < ? AND gratis = 0
-    ''', (str(month_start), str(month_end)))
-    estimated_month_income = cursor.fetchone()[0]
-
-    # Stima guadagno SETTIMANALE
-    cursor.execute('''
-        SELECT COALESCE(SUM(costo), 0)
-        FROM lezioni
-        WHERE giorno BETWEEN ? AND ? AND gratis = 0
-    ''', (str(week_start), str(week_end)))
-    estimated_week_income = cursor.fetchone()[0]
-
-    # Stima guadagno OGGI
-    cursor.execute('''
-        SELECT COALESCE(SUM(costo), 0)
-        FROM lezioni
-        WHERE giorno = ? AND gratis = 0
-    ''', (str(today),))
-    estimated_today_income = cursor.fetchone()[0]
-
-    # ===== TREND ULTIMI 30 GIORNI =====
-
-    # Lezioni per giorno (ultimi 30 giorni)
-    chart_start = today - timedelta(days=29)
-    cursor.execute('''
-        SELECT giorno, COUNT(*) as count
-        FROM lezioni
-        WHERE giorno BETWEEN ? AND ?
-        GROUP BY giorno
-        ORDER BY giorno ASC
-    ''', (str(chart_start), str(today)))
-
-    lessons_by_day = {row[0]: row[1] for row in cursor.fetchall()}
-
-    chart_lessons_labels = []
-    chart_lessons_data = []
-    for i in range(30):
-        date = chart_start + timedelta(days=i)
-        chart_lessons_labels.append(date.strftime('%d/%m'))
-        chart_lessons_data.append(lessons_by_day.get(str(date), 0))
-
-    # Pagamenti per giorno (ultimi 30 giorni)
-    cursor.execute('''
-        SELECT giorno, SUM(somma) as total
-        FROM pagamenti
-        WHERE giorno BETWEEN ? AND ?
-        GROUP BY giorno
-        ORDER BY giorno ASC
-    ''', (str(chart_start), str(today)))
-
-    payments_by_day = {row[0]: row[1] for row in cursor.fetchall()}
-
-    chart_payments_labels = []
-    chart_payments_data = []
-    for i in range(30):
-        date = chart_start + timedelta(days=i)
-        chart_payments_labels.append(date.strftime('%d/%m'))
-        chart_payments_data.append(payments_by_day.get(str(date), 0))
-
-    # ===== ABBINAMENTI =====
-
-    # Lezioni completamente pagate
-    cursor.execute('''
-        SELECT COUNT(DISTINCT l.id_lezione)
-        FROM lezioni l
-        LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
-        WHERE l.gratis = 0
-        GROUP BY l.id_lezione
-        HAVING COALESCE(SUM(pl.quota_usata), 0) >= l.costo
-    ''')
-    completamente_pagati = len(cursor.fetchall())
-
-    # Lezioni parzialmente pagate
-    cursor.execute('''
-        SELECT COUNT(DISTINCT l.id_lezione)
-        FROM lezioni l
-        LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
-        WHERE l.gratis = 0
-        GROUP BY l.id_lezione
-        HAVING COALESCE(SUM(pl.quota_usata), 0) > 0 AND COALESCE(SUM(pl.quota_usata), 0) < l.costo
-    ''')
-    parzialmente_pagati = len(cursor.fetchall())
-
-    # Lezioni non pagate
-    cursor.execute('''
-        SELECT COUNT(DISTINCT l.id_lezione)
-        FROM lezioni l
-        LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
-        WHERE l.gratis = 0
-        GROUP BY l.id_lezione
-        HAVING COALESCE(SUM(pl.quota_usata), 0) = 0
-    ''')
-    non_pagati = len(cursor.fetchall())
-
-    # Lezioni gratis
-    cursor.execute('SELECT COUNT(*) FROM lezioni WHERE gratis = 1')
-    gratis = cursor.fetchone()[0]
+    months = []
+    for offset in range(4):
+        start, end, month, year = month_range(offset)
+        lessons_completed, payments_sum, payments_count, data_end = period_stats(start, end)
+        if offset == 0:
+            title = 'Mese corrente'
+        elif offset == 1:
+            title = 'Mese precedente'
+        else:
+            title = f'{offset} mesi fa'
+        months.append({
+            'title': title,
+            'label': f"{month_names[month]} {year}",
+            'range_label': f"{start.strftime('%d/%m')} → {end.strftime('%d/%m')}",
+            'lessons_completed': lessons_completed,
+            'payments_sum': payments_sum,
+            'payments_count': payments_count,
+            'data_until': data_end.strftime('%d/%m/%Y'),
+            'is_current': offset == 0
+        })
 
     conn.close()
 
     return {
-        'today': {
-            'date': today.strftime('%d/%m/%Y')
-        },
-        'week': {
-            'start': week_start.strftime('%d/%m'),
-            'end': week_end.strftime('%d/%m')
-        },
-        'month': {
-            'name': month_names[selected_month],
-            'year': selected_year
-        },
-        'lessons': {
-            'today': lessons_today,
-            'week': lessons_week,
-            'week_past': lessons_week_past,
-            'week_future': lessons_week_future,
-            'month': lessons_month,
-            'month_past': lessons_month_past,
-            'month_future': lessons_month_future
-        },
-        'payments': {
-            'today': payments_today,
-            'today_count': payments_today_count,
-            'week': payments_week,
-            'week_count': payments_week_count,
-            'month': payments_month,
-            'month_count': payments_month_count,
-            'month_avg': payments_month_avg
-        },
-        'income': {
-            'estimated_today': estimated_today_income,
-            'estimated_week': estimated_week_income,
-            'estimated_month': estimated_month_income
-        },
-        'chart_lessons': {
-            'labels': chart_lessons_labels,
-            'data': chart_lessons_data
-        },
-        'chart_payments': {
-            'labels': chart_payments_labels,
-            'data': chart_payments_data
-        },
-        'abbinamenti': {
-            'completamente_pagati': completamente_pagati,
-            'parzialmente_pagati': parzialmente_pagati,
-            'non_pagati': non_pagati,
-            'gratis': gratis
-        },
-        'available_months': available_months,
-        'available_years': available_years,
-        'selected_month': selected_month,
-        'selected_year': selected_year
+        'today': today.strftime('%d/%m/%Y'),
+        'weeks': weeks,
+        'months': months
     }
 
 

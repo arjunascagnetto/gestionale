@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Routines - Abbinamenti e Gestione{% endblock %}
+{% block head_extra %}
+<style>
+    .abbinamento-item {
+        border-left: 4px solid #94a3b8;
+        background-color: #f3f4f6;
+        border-radius: 0.5rem;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="space-y-6">
+        <div class="bg-white p-6 rounded-xl shadow">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold">🛠️ Routines Operative</h1>
+                    <p class="text-sm text-slate-600">Gestisci abbinamenti, approvazioni e normalizzazioni da un'unica pagina.</p>
+                </div>
+            </div>
+
+            <div class="mt-6 border-b border-gray-200">
+            <nav class="-mb-px flex flex-wrap gap-4" aria-label="Tabs">
+                <a href="{{ url_for('routines', tab='abbinamenti') }}"
+                   class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'abbinamenti' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    📊 Abbinamenti completati
+                </a>
+                <a href="{{ url_for('routines', tab='approva') }}"
+                   class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'approva' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    ✅ Approva paganti
+                </a>
+                <a href="{{ url_for('routines', tab='normalizza') }}"
+                   class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'normalizza' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    ✏️ Normalizza nomi
+                </a>
+                <a href="{{ url_for('routines', tab='rifiutati') }}"
+                   class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'rifiutati' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    🚫 Rifiutati
+                </a>
+            </nav>
+            </div>
+        </div>
+
+        {% if active_tab == 'abbinamenti' %}
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold">📊 Abbinamenti completati</h2>
+                    <p class="text-sm text-gray-600">Controlla e, se necessario, rimuovi i collegamenti tra lezioni e pagamenti.</p>
+                </div>
+                <form method="GET" action="{{ url_for('routines') }}">
+                    <input type="hidden" name="tab" value="abbinamenti">
+                    <button class="px-4 py-2 bg-gray-100 text-sm rounded hover:bg-gray-200">🔄 Aggiorna elenco</button>
+                </form>
+            </div>
+
+            {% if abbinamenti %}
+            <div class="space-y-3">
+                {% for abb in abbinamenti %}
+                <div class="abbinamento-item p-4 rounded flex flex-wrap justify-between items-center gap-4">
+                    <div class="flex-1 grid md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="font-semibold text-slate-600">Lezione</div>
+                            <div class="text-sm">{{ abb.lezione }}</div>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-slate-600">Pagamento</div>
+                            <div class="text-sm">{{ abb.pagamento }} → {{ abb.quota }} {{ abb.valuta }}</div>
+                        </div>
+                    </div>
+                    <form action="/delete/{{ abb.id }}" method="POST"
+                          onsubmit="return confirm('Eliminare questo abbinamento?')">
+                        <button type="submit"
+                                class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm">
+                            🗑️ Elimina
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nessun abbinamento esistente.</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg shadow-lg p-4">
+            <iframe src="{{ iframe_src }}" class="w-full min-h-[75vh] border rounded" loading="lazy"></iframe>
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}
