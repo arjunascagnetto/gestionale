@@ -13,6 +13,11 @@ DB_PATH = Path(__file__).parent.parent / "pagamenti.db"
 DEFAULT_LESSON_COST = 2000
 MIN_DATA_DATE = date(2025, 8, 1)
 MIN_DATA_STR = MIN_DATA_DATE.isoformat()
+SUBSCRIPTION_PLANS = {
+    20000: 10,
+    10500: 5,
+    6600: 3
+}
 
 
 def get_db():
@@ -438,12 +443,32 @@ def index():
 
     lessons = get_unassigned_lessons(lesson_order, filter_studenti, hide_paid_lessons, month_filter)
     payments = get_available_payments(payment_order, filter_paganti, hide_used_payments, month_filter)
+
+    subscription_payments = []
+    regular_payments = []
+    for payment in payments:
+        amount = int(payment['somma'])
+        lessons_count = SUBSCRIPTION_PLANS.get(amount)
+        if lessons_count:
+            quota_per_lesson = amount // lessons_count if lessons_count else 0
+            lessons_left = int(max(0, payment['residuo'] // quota_per_lesson)) if quota_per_lesson else 0
+            lessons_used = lessons_count - lessons_left
+            payment = dict(payment)
+            payment['subscription_lessons'] = lessons_count
+            payment['subscription_lessons_left'] = lessons_left
+            payment['subscription_lessons_used'] = lessons_used
+            payment['subscription_value'] = quota_per_lesson
+            subscription_payments.append(payment)
+        else:
+            regular_payments.append(payment)
+
     suggestions = get_suggested_abbinamenti()
 
     return render_template(
         'index.html',
         lessons=lessons,
-        payments=payments,
+        subscription_payments=subscription_payments,
+        regular_payments=regular_payments,
         suggestions=suggestions,
         lesson_order=lesson_order,
         payment_order=payment_order,

@@ -101,9 +101,52 @@
             </div>
         </div>
 
-        <!-- Grid 2 colonne -->
-        <div class="grid grid-cols-2 gap-6 mb-6">
-            <!-- LEZIONI (Sinistra) -->
+        <!-- Grid 3 colonne -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+            <!-- ABBONAMENTI (Colonna 1) -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">🎟️ ABBONAMENTI ATTIVI</h2>
+                </div>
+
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                    {% for payment in subscription_payments %}
+                    <div class="payment-item p-3 rounded {% if payment.is_completamente_usato %}completamente-usato{% elif payment.has_abbinamenti %}abbinato{% endif %}" id="subscription-{{ payment.id }}">
+                        <label class="flex items-start cursor-pointer">
+                            <input type="checkbox"
+                                   name="payments[]"
+                                   value="{{ payment.id }}"
+                                   data-residuo="{{ payment.residuo }}"
+                                   class="mt-1 mr-3 w-5 h-5 payment-checkbox"
+                                   onchange="updateTotals()"
+                                   {% if payment.is_completamente_usato %}disabled{% endif %}>
+                            <div class="flex-1">
+                                <div class="font-semibold flex items-center gap-2">
+                                    {{ payment.nome_pagante }}
+                                    <span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                        {{ payment.subscription_lessons }} lezioni
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-600">
+                                    📅 {{ payment.giorno }} ⏰ {{ payment.ora }}
+                                </div>
+                                <div class="text-sm text-gray-700 mt-1">
+                                    Residuo: {{ payment.residuo }} {{ payment.valuta }}
+                                    <span class="text-xs text-gray-500">(Lezioni rimaste: {{ payment.subscription_lessons_left }})</span>
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    Prezzo per lezione: {{ payment.subscription_value }} RUB
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-500 text-center py-8">Nessun abbonamento attivo</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- LEZIONI (Colonna 2) -->
             <div class="bg-white rounded-lg shadow-lg p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-bold">📚 LEZIONI NON PAGATE</h2>
@@ -190,10 +233,10 @@
                 </div>
             </div>
 
-            <!-- PAGAMENTI (Destra) -->
+            <!-- PAGAMENTI SINGOLI (Colonna 3) -->
             <div class="bg-white rounded-lg shadow-lg p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold">💰 PAGAMENTI DISPONIBILI</h2>
+                    <h2 class="text-xl font-bold">💰 PAGAMENTI SINGOLI</h2>
                     <div class="flex gap-2">
                         <a href="?lesson_order={{ lesson_order }}&payment_order=ASC"
                            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
@@ -208,7 +251,7 @@
 
 
                 <div class="space-y-2 max-h-96 overflow-y-auto" id="payments-list">
-                    {% for payment in payments %}
+                    {% for payment in regular_payments %}
                     <div class="payment-item p-3 rounded {% if payment.is_completamente_usato %}completamente-usato{% elif payment.has_abbinamenti %}abbinato{% endif %}" id="payment-{{ payment.id }}">
                         <label class="flex items-start cursor-pointer">
                             <input type="checkbox"
