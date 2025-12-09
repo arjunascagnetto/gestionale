@@ -18,6 +18,25 @@ SUBSCRIPTION_PLANS = {
     10500: 5,
     6600: 3
 }
+EXCLUDED_PAYMENT_STATUSES = ('rejected', 'pending_approval')
+
+
+def ensure_trash_table():
+    """Tabella di supporto per pagamenti cestinati (non visibili, ma senza cambiare stato)."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS pagamenti_cestinati (
+                pagamento_id INTEGER PRIMARY KEY,
+                trashed_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+ensure_trash_table()
 
 
 def get_db():
@@ -55,7 +74,7 @@ def get_student_default_cost(nome_studente, conn=None):
     return row['costo'] if row else None
 
 
-def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None):
+def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None, min_date=MIN_DATA_STR):
     """
     Recupera TUTTE le lezioni, con flag per indicare se sono abbinate.
 
@@ -64,7 +83,9 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
         filter_studenti: Lista di nomi studenti da filtrare (None = tutti)
         hide_paid: Se True, nasconde lezioni completamente pagate
         month_filter: Tupla (mese, anno) per filtrare per mese, None = tutti
+        min_date: stringa ISO o date di inizio (default MIN_DATA_STR)
     """
+    min_date_str = min_date if isinstance(min_date, str) else min_date.isoformat()
     conn = get_db()
     cursor = conn.cursor()
 
@@ -86,7 +107,7 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
 
     # Aggiungi filtro studenti se specificato
     where_clauses = ['l.giorno >= ?']
-    params = [MIN_DATA_STR]
+    params = [min_date_str]
 
     if filter_studenti and len(filter_studenti) > 0:
         placeholders = ','.join(['?' for _ in filter_studenti])
@@ -150,7 +171,7 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
     return lessons
 
 
-def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, month_filter=None):
+def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, month_filter=None, min_date=MIN_DATA_STR):
     """
     Recupera TUTTI i pagamenti (inclusi quelli completamente utilizzati).
 
@@ -159,7 +180,9 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
         filter_paganti: Lista di nomi paganti da filtrare (None = tutti)
         hide_used: Se True, nasconde pagamenti completamente usati
         month_filter: Tupla (mese, anno) per filtrare per mese, None = tutti
+        min_date: stringa ISO o date di inizio (default MIN_DATA_STR)
     """
+    min_date_str = min_date if isinstance(min_date, str) else min_date.isoformat()
     conn = get_db()
     cursor = conn.cursor()
 
@@ -182,18 +205,27 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
     '''
 
     # Aggiungi filtro paganti se specificato
-    where_clauses = ["p.stato != 'rejected'", 'p.giorno >= ?']
-    params = [MIN_DATA_STR]
+    status_placeholders = ','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])
+    where_clauses = [
+        f"p.stato NOT IN ({status_placeholders})",
+        'p.giorno >= ?',
+        'p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)'
+    ]
+    params = list(EXCLUDED_PAYMENT_STATUSES) + [min_date_str]
 
     if filter_paganti and len(filter_paganti) > 0:
         placeholders = ','.join(['?' for _ in filter_paganti])
         where_clauses.append(f'p.nome_pagante IN ({placeholders})')
         params.extend(filter_paganti)
 
-    # Filtro mese/anno
+    having_clauses = []
+    # Filtro mese/anno: mostra comunque i pagamenti con residuo > 0 anche se di mesi precedenti
     if month_filter:
         month, year = month_filter
-        where_clauses.append("strftime('%Y', p.giorno) = ? AND strftime('%m', p.giorno) = ?")
+        having_clauses.append(
+            "(strftime('%Y', p.giorno) = ? AND strftime('%m', p.giorno) = ?) "
+            "OR (p.somma - COALESCE(SUM(pl.quota_usata), 0) > 0)"
+        )
         params.extend([str(year), f'{month:02d}'])
 
     if where_clauses:
@@ -201,9 +233,12 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
 
     query += f' GROUP BY p.id_pagamento'
 
-    # Aggiungi filtro HAVING per pagamenti usati
+    # Aggiungi filtri HAVING dopo il GROUP BY
     if hide_used:
-        query += ' HAVING is_completamente_usato = 0'
+        having_clauses.append('is_completamente_usato = 0')
+
+    if having_clauses:
+        query += ' HAVING ' + ' AND '.join([f'({clause})' for clause in having_clauses])
 
     query += f' ORDER BY p.giorno {order}, p.ora {order}'
 
@@ -266,6 +301,131 @@ def get_existing_abbinamenti():
 
     conn.close()
     return abbinamenti
+
+
+def get_payments_overview(order='DESC', filter_pagante=None, month_filter=None, day_filter=None):
+    """
+    Recupera pagamenti (anche completamente usati) con eventuali abbinamenti.
+
+    Args:
+        order: 'ASC' o 'DESC' per ordinamento data
+        filter_pagante: Nome pagante da filtrare (None = tutti)
+        month_filter: Tupla (mese, anno) per filtrare, None = tutti
+        day_filter: Data specifica (YYYY-MM-DD) per filtrare
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = '''
+        SELECT
+            p.id_pagamento,
+            p.nome_pagante,
+            p.giorno,
+            p.ora,
+            p.somma,
+            p.valuta,
+            p.stato,
+            COALESCE(SUM(pl.quota_usata), 0) as quota_utilizzata,
+            p.somma - COALESCE(SUM(pl.quota_usata), 0) as residuo,
+            CASE WHEN p.somma - COALESCE(SUM(pl.quota_usata), 0) = 0 THEN 1 ELSE 0 END as is_completamente_usato
+        FROM pagamenti p
+        LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+    '''
+
+    where_clauses = [
+        f"p.stato NOT IN ({','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])})",
+        'p.giorno >= ?',
+        'p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)'
+    ]
+    params = list(EXCLUDED_PAYMENT_STATUSES) + [MIN_DATA_STR]
+
+    if filter_pagante:
+        where_clauses.append('p.nome_pagante = ?')
+        params.append(filter_pagante)
+
+    if day_filter:
+        where_clauses.append('p.giorno = ?')
+        params.append(day_filter)
+
+    query += ' WHERE ' + ' AND '.join(where_clauses)
+    query += ' GROUP BY p.id_pagamento'
+
+    having_clauses = []
+    if month_filter and not day_filter:
+        month, year = month_filter
+        having_clauses.append(
+            "(strftime('%Y', p.giorno) = ? AND strftime('%m', p.giorno) = ?) "
+            "OR (p.somma - COALESCE(SUM(pl.quota_usata), 0) > 0)"
+        )
+        params.extend([str(year), f'{month:02d}'])
+
+    if having_clauses:
+        query += ' HAVING ' + ' AND '.join([f'({clause})' for clause in having_clauses])
+
+    query += f' ORDER BY p.giorno {order}, p.ora {order}'
+
+    cursor.execute(query, params)
+    payments = []
+    payment_ids = []
+    for row in cursor.fetchall():
+        payment_ids.append(row['id_pagamento'])
+        payments.append({
+            'id': row['id_pagamento'],
+            'nome_pagante': row['nome_pagante'],
+            'giorno': row['giorno'],
+            'ora': row['ora'],
+            'somma': row['somma'],
+            'valuta': row['valuta'],
+            'stato': row['stato'],
+            'residuo': row['residuo'],
+            'quota_utilizzata': row['quota_utilizzata'],
+            'is_completamente_usato': row['is_completamente_usato'],
+            'abbinamenti': []
+        })
+
+    if payment_ids:
+        placeholders = ','.join(['?' for _ in payment_ids])
+        cursor.execute(f'''
+            SELECT
+                pl.id,
+                pl.pagamento_id,
+                pl.lezione_id,
+                pl.quota_usata,
+                l.nome_studente,
+                l.giorno,
+                l.ora,
+                l.costo,
+                l.gratis
+            FROM pagamenti_lezioni pl
+            JOIN lezioni l ON pl.lezione_id = l.id_lezione
+            WHERE pl.pagamento_id IN ({placeholders})
+            ORDER BY l.giorno DESC, l.ora DESC
+        ''', payment_ids)
+
+        mapping = {p['id']: p for p in payments}
+        for row in cursor.fetchall():
+            mapping[row['pagamento_id']]['abbinamenti'].append({
+                'id': row['id'],
+                'lezione_id': row['lezione_id'],
+                'studente': row['nome_studente'],
+                'giorno': row['giorno'],
+                'ora': row['ora'],
+                'quota': row['quota_usata'],
+                'costo': row['costo'],
+                'gratis': row['gratis']
+            })
+
+    # Lista paganti per filtro
+    cursor.execute('''
+        SELECT DISTINCT nome_pagante
+        FROM pagamenti
+        WHERE stato NOT IN ({statuses}) AND giorno >= ?
+        ORDER BY nome_pagante COLLATE NOCASE
+    '''.format(statuses=','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])), list(EXCLUDED_PAYMENT_STATUSES) + [MIN_DATA_STR])
+    paganti_list = [row['nome_pagante'] for row in cursor.fetchall()]
+
+    conn.close()
+    return payments, paganti_list
 
 
 def get_all_studenti():
@@ -346,6 +506,7 @@ def get_suggested_abbinamenti():
         -- Escludi suggerimenti già rifiutati
         LEFT JOIN suggerimenti_rifiutati sr ON l.id_lezione = sr.lezione_id AND p.id_pagamento = sr.pagamento_id
         WHERE p.stato IN ('sospeso', 'archivio')
+            AND p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)
             AND l.gratis = 0
             AND sr.id IS NULL
             AND l.giorno >= ?
@@ -431,18 +592,36 @@ def index():
     hide_paid_lessons = request.args.get('hide_paid', '1') == '1'
     hide_used_payments = request.args.get('hide_used', '1') == '1'
 
-    # Filtro mese/anno - default: mese corrente
+    # Filtro mese/anno - default: includi mese corrente e precedente
     from datetime import datetime
-    today = datetime.now()
+    today_dt = datetime.now()
+    today = today_dt.date()
     filter_month = request.args.get('month', str(today.month))
     filter_year = request.args.get('year', str(today.year))
-    all_time = request.args.get('all_time', '0') == '1'
+    all_time = request.args.get('all_time', '1') == '1'
 
-    # Se all_time, passa None, altrimenti passa mese/anno
+    first_of_current = today.replace(day=1)
+    last_day_prev = first_of_current - timedelta(days=1)
+    min_date_home = last_day_prev.replace(day=1)  # primo giorno del mese precedente
+
+    # Se all_time disattivato, applica filtro mese/anno; altrimenti nessun filtro mese ma resta il limite min_date
     month_filter = None if all_time else (int(filter_month), int(filter_year))
+    min_date_param = min_date_home if month_filter is None else MIN_DATA_STR
 
-    lessons = get_unassigned_lessons(lesson_order, filter_studenti, hide_paid_lessons, month_filter)
-    payments = get_available_payments(payment_order, filter_paganti, hide_used_payments, month_filter)
+    lessons = get_unassigned_lessons(
+        lesson_order,
+        filter_studenti,
+        hide_paid_lessons,
+        month_filter,
+        min_date=min_date_param
+    )
+    payments = get_available_payments(
+        payment_order,
+        filter_paganti,
+        hide_used_payments,
+        month_filter,
+        min_date=min_date_param
+    )
 
     subscription_payments = []
     regular_payments = []
@@ -912,7 +1091,125 @@ def delete_abbinamento(abbinamento_id):
     conn.commit()
     conn.close()
 
-    return redirect(url_for('index'))
+    next_url = request.args.get('next') or request.form.get('next')
+    return redirect(next_url or url_for('index'))
+
+
+@app.route('/payments/<int:payment_id>/delete_abbinamento/<int:abbinamento_id>', methods=['POST'])
+def delete_payment_abbinamento(payment_id, abbinamento_id):
+    """Elimina un abbinamento da un pagamento e riporta pagamento/lezione in stato libero."""
+    next_url = request.form.get('next') or request.args.get('next')
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            DELETE FROM pagamenti_lezioni
+            WHERE id = ? AND pagamento_id = ?
+        ''', (abbinamento_id, payment_id))
+
+        # Aggiorna stato pagamento in base al residuo attuale
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = CASE
+                WHEN somma - COALESCE((
+                    SELECT SUM(pl.quota_usata) FROM pagamenti_lezioni pl WHERE pl.pagamento_id = ?
+                ), 0) = 0 THEN 'associato'
+                ELSE 'sospeso'
+            END
+            WHERE id_pagamento = ?
+              AND stato IN ('associato', 'sospeso')
+        ''', (payment_id, payment_id))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Errore eliminazione abbinamento pagamento {payment_id}: {e}")
+    finally:
+        conn.close()
+
+    return redirect(next_url or url_for('routines', tab='pagamenti'))
+
+
+@app.route('/payments/<int:payment_id>/trash', methods=['POST'])
+def trash_payment(payment_id):
+    """Metti un pagamento nel cestino (tabella di appoggio) senza cambiare stato."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('SELECT 1 FROM pagamenti WHERE id_pagamento = ?', (payment_id,))
+        if cursor.fetchone() is None:
+            return jsonify({'success': False, 'error': 'Pagamento non trovato'}), 404
+
+        cursor.execute('''
+            INSERT OR REPLACE INTO pagamenti_cestinati (pagamento_id, trashed_at)
+            VALUES (?, CURRENT_TIMESTAMP)
+        ''', (payment_id,))
+
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/manual_payment', methods=['POST'])
+def api_manual_payment():
+    """Crea un pagamento manuale (es. contanti) direttamente dal pannello web."""
+    data = request.get_json(silent=True) or {}
+    nome_pagante = (data.get('nome_pagante') or '').strip()
+    giorno = (data.get('giorno') or '').strip() or date.today().isoformat()
+    ora = (data.get('ora') or '').strip()
+    valuta = (data.get('valuta') or 'RUB').strip().upper() or 'RUB'
+    stato = (data.get('stato') or 'sospeso').strip()
+
+    try:
+        somma = float(data.get('somma'))
+    except (TypeError, ValueError):
+        somma = None
+
+    # Validazioni base
+    if not nome_pagante:
+        return jsonify({'success': False, 'error': 'Nome pagante obbligatorio'}), 400
+    if somma is None or somma <= 0:
+        return jsonify({'success': False, 'error': 'Inserisci un importo valido'}), 400
+
+    # Normalizza/valida data e ora
+    try:
+        datetime.strptime(giorno, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Data non valida (YYYY-MM-DD)'}), 400
+
+    if not ora:
+        ora = datetime.now().strftime('%H:%M')
+    else:
+        try:
+            datetime.strptime(ora, '%H:%M')
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Ora non valida (HH:MM)'}), 400
+
+    allowed_statuses = {'sospeso', 'pending_approval', 'rejected', 'associato', 'usato'}
+    if stato not in allowed_statuses:
+        stato = 'sospeso'
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            INSERT INTO pagamenti (nome_pagante, giorno, ora, somma, valuta, stato, fonte_msg_id, skipped, notificato)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0)
+        ''', (nome_pagante, giorno, ora, somma, valuta, stato))
+        conn.commit()
+        return jsonify({'success': True, 'id_pagamento': cursor.lastrowid})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/stats')
@@ -926,12 +1223,45 @@ def stats():
 def routines():
     """Pagina per operazioni ricorrenti (abbinamenti completati e gestione)."""
     tab = request.args.get('tab', 'abbinamenti')
+    now = datetime.now()
 
     abbinamenti = []
     iframe_src = None
+    payments = []
+    paganti_options = []
+    filter_pagante = request.args.get('pagante') or None
+    filter_day = request.args.get('day') or None
+    filter_month = None
+    filter_year = None
+    payment_order = request.args.get('payment_order', 'DESC')
+    all_time = request.args.get('all_time', '0') == '1'
 
     if tab == 'abbinamenti':
         abbinamenti = get_existing_abbinamenti()
+    elif tab == 'pagamenti':
+        filter_month = request.args.get('month', str(now.month))
+        filter_year = request.args.get('year', str(now.year))
+        month_filter = None if all_time or filter_day else (int(filter_month), int(filter_year))
+        payments, paganti_options = get_payments_overview(
+            payment_order,
+            filter_pagante=filter_pagante,
+            month_filter=month_filter,
+            day_filter=filter_day
+        )
+        # Lezioni con debito > 0 per uso manuale
+        lessons_raw = get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None)
+        lessons_for_manual = []
+        for l in lessons_raw:
+            remaining = max(0, (l['costo'] or 0) - (l['quota_pagata'] or 0))
+            if l['gratis']:
+                continue
+            if remaining > 0:
+                lessons_for_manual.append({
+                    'id': l['id'],
+                    'label': f"{l['studente']} - {l['giorno']} {l['ora']}",
+                    'remaining': remaining,
+                    'costo': l['costo']
+                })
     elif tab == 'approva':
         iframe_src = url_for('approva_paganti', embedded=1)
     elif tab == 'normalizza':
@@ -946,6 +1276,20 @@ def routines():
         active_tab=tab,
         abbinamenti=abbinamenti,
         iframe_src=iframe_src,
+        payments=payments,
+        paganti_options=paganti_options,
+        filter_pagante=filter_pagante or '',
+        filter_day=filter_day or '',
+        filter_month=filter_month,
+        filter_year=filter_year,
+        payment_order=payment_order,
+        all_time=all_time,
+        current_year=now.year,
+        current_month=now.month,
+        today_iso=now.date().isoformat(),
+        current_time=now.strftime('%H:%M'),
+        lessons_for_manual=lessons_for_manual if tab == 'pagamenti' else [],
+        request_path=request.full_path,
         active_page='routines'
     )
 
@@ -1643,6 +1987,112 @@ def api_force_full_calendar_update():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/manual_abbinamento', methods=['POST'])
+def api_manual_abbinamento():
+    """
+    Usa una quota specifica di un pagamento per una lezione indicata (inserimento manuale parziale).
+    """
+    data = request.get_json(silent=True) or {}
+    pagamento_id = data.get('pagamento_id')
+    lezione_id = data.get('lezione_id')
+    quota = data.get('quota')
+
+    try:
+        pagamento_id = int(pagamento_id)
+        lezione_id = int(lezione_id)
+        quota = float(quota)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Dati non validi'}), 400
+
+    if quota <= 0:
+        return jsonify({'success': False, 'error': 'Quota deve essere > 0'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # Stato pagamento/residuo
+        cursor.execute('''
+            SELECT
+                p.nome_pagante,
+                p.somma - COALESCE(SUM(pl.quota_usata), 0) AS residuo
+            FROM pagamenti p
+            LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+            WHERE p.id_pagamento = ?
+            GROUP BY p.id_pagamento
+        ''', (pagamento_id,))
+        pay = cursor.fetchone()
+        if not pay:
+            return jsonify({'success': False, 'error': 'Pagamento non trovato'}), 404
+        if pay['residuo'] <= 0:
+            return jsonify({'success': False, 'error': 'Pagamento senza residuo'}), 400
+        if quota > pay['residuo']:
+            return jsonify({'success': False, 'error': 'Quota superiore al residuo del pagamento'}), 400
+
+        # Stato lezione / quanto resta da pagare
+        cursor.execute('''
+            SELECT
+                l.nome_studente,
+                l.costo,
+                l.gratis,
+                l.costo - COALESCE(SUM(pl.quota_usata), 0) AS da_pagare
+            FROM lezioni l
+            LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
+            WHERE l.id_lezione = ?
+            GROUP BY l.id_lezione
+        ''', (lezione_id,))
+        lesson = cursor.fetchone()
+        if not lesson:
+            return jsonify({'success': False, 'error': 'Lezione non trovata'}), 404
+        if lesson['gratis']:
+            return jsonify({'success': False, 'error': 'Lezione marcata gratis'}), 400
+        if lesson['da_pagare'] <= 0:
+            return jsonify({'success': False, 'error': 'Lezione già pagata'}), 400
+        if quota > lesson['da_pagare']:
+            return jsonify({'success': False, 'error': 'Quota superiore al dovuto per la lezione'}), 400
+
+        # Inserisci/aggiorna
+        cursor.execute('''
+            SELECT id FROM pagamenti_lezioni
+            WHERE pagamento_id = ? AND lezione_id = ?
+        ''', (pagamento_id, lezione_id))
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.execute(
+                'UPDATE pagamenti_lezioni SET quota_usata = quota_usata + ? WHERE id = ?',
+                (quota, existing['id'])
+            )
+        else:
+            cursor.execute(
+                'INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata) VALUES (?, ?, ?)',
+                (pagamento_id, lezione_id, quota)
+            )
+
+        # Salva associazione studente-pagante
+        save_association(cursor, pay['nome_pagante'], lesson['nome_studente'])
+
+        # Aggiorna stato pagamento se esaurito
+        cursor.execute('''
+            UPDATE pagamenti
+            SET stato = CASE
+                WHEN somma - COALESCE((
+                    SELECT SUM(pl.quota_usata) FROM pagamenti_lezioni pl WHERE pl.pagamento_id = ?
+                ), 0) = 0 THEN 'associato'
+                ELSE 'sospeso'
+            END
+            WHERE id_pagamento = ?
+        ''', (pagamento_id, pagamento_id))
+
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 def calculate_statistics(*_unused, **_unused_kwargs):
     """
     Calcola statistiche essenziali su lezioni svolte e pagamenti ricevuti
@@ -1669,9 +2119,15 @@ def calculate_statistics(*_unused, **_unused_kwargs):
         )
         lessons_completed = cursor.fetchone()[0] or 0
 
+        status_placeholders = ','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])
         cursor.execute(
-            'SELECT COALESCE(SUM(somma), 0), COUNT(*) FROM pagamenti WHERE giorno BETWEEN ? AND ?',
-            (str(start_date), str(effective_end))
+            f'''
+            SELECT COALESCE(SUM(somma), 0), COUNT(*)
+            FROM pagamenti
+            WHERE giorno BETWEEN ? AND ?
+              AND stato NOT IN ({status_placeholders})
+            ''',
+            [str(start_date), str(effective_end), *EXCLUDED_PAYMENT_STATUSES]
         )
         payments_sum, payments_count = cursor.fetchone()
         payments_sum = payments_sum or 0
