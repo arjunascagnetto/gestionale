@@ -39,6 +39,26 @@ def ensure_trash_table():
 ensure_trash_table()
 
 
+def ensure_subscription_table():
+    """Tabella per etichettare manualmente pagamenti come abbonamenti."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS pagamenti_abbonamenti (
+                pagamento_id INTEGER PRIMARY KEY,
+                lezioni_totali INTEGER NOT NULL,
+                note TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (pagamento_id) REFERENCES pagamenti (id_pagamento) ON DELETE CASCADE
+            )
+        ''')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+ensure_subscription_table()
+
 def get_db():
     """Crea connessione database."""
     conn = sqlite3.connect(DB_PATH)
@@ -171,7 +191,7 @@ def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, 
     return lessons
 
 
-def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, month_filter=None, min_date=MIN_DATA_STR):
+def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, month_filter=None, min_date=MIN_DATA_STR, include_residual_any_date=False):
     """
     Recupera TUTTI i pagamenti (inclusi quelli completamente utilizzati).
 
@@ -181,6 +201,7 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
         hide_used: Se True, nasconde pagamenti completamente usati
         month_filter: Tupla (mese, anno) per filtrare per mese, None = tutti
         min_date: stringa ISO o date di inizio (default MIN_DATA_STR)
+        include_residual_any_date: Se True, mostra pagamenti con residuo anche se antecedenti a min_date
     """
     min_date_str = min_date if isinstance(min_date, str) else min_date.isoformat()
     conn = get_db()
@@ -208,10 +229,9 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
     status_placeholders = ','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])
     where_clauses = [
         f"p.stato NOT IN ({status_placeholders})",
-        'p.giorno >= ?',
         'p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)'
     ]
-    params = list(EXCLUDED_PAYMENT_STATUSES) + [min_date_str]
+    params = list(EXCLUDED_PAYMENT_STATUSES)
 
     if filter_paganti and len(filter_paganti) > 0:
         placeholders = ','.join(['?' for _ in filter_paganti])
@@ -219,6 +239,15 @@ def get_available_payments(order='DESC', filter_paganti=None, hide_used=False, m
         params.extend(filter_paganti)
 
     having_clauses = []
+    if include_residual_any_date:
+        having_clauses.append(
+            "(p.giorno >= ?) OR (p.somma - COALESCE(SUM(pl.quota_usata), 0) > 0)"
+        )
+        params.append(min_date_str)
+    else:
+        where_clauses.append('p.giorno >= ?')
+        params.append(min_date_str)
+
     # Filtro mese/anno: mostra comunque i pagamenti con residuo > 0 anche se di mesi precedenti
     if month_filter:
         month, year = month_filter
@@ -424,8 +453,18 @@ def get_payments_overview(order='DESC', filter_pagante=None, month_filter=None, 
     '''.format(statuses=','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])), list(EXCLUDED_PAYMENT_STATUSES) + [MIN_DATA_STR])
     paganti_list = [row['nome_pagante'] for row in cursor.fetchall()]
 
+    subscription_map = {}
+    if payment_ids:
+        placeholders = ','.join(['?' for _ in payment_ids])
+        cursor.execute(f'''
+            SELECT pagamento_id, lezioni_totali
+            FROM pagamenti_abbonamenti
+            WHERE pagamento_id IN ({placeholders})
+        ''', payment_ids)
+        subscription_map = {row['pagamento_id']: row['lezioni_totali'] for row in cursor.fetchall()}
+
     conn.close()
-    return payments, paganti_list
+    return payments, paganti_list, subscription_map
 
 
 def get_all_studenti():
@@ -598,15 +637,27 @@ def index():
     today = today_dt.date()
     filter_month = request.args.get('month', str(today.month))
     filter_year = request.args.get('year', str(today.year))
-    all_time = request.args.get('all_time', '1') == '1'
+    all_time_param = request.args.get('all_time')
+    all_time = all_time_param == '1'
 
     first_of_current = today.replace(day=1)
     last_day_prev = first_of_current - timedelta(days=1)
     min_date_home = last_day_prev.replace(day=1)  # primo giorno del mese precedente
 
-    # Se all_time disattivato, applica filtro mese/anno; altrimenti nessun filtro mese ma resta il limite min_date
-    month_filter = None if all_time else (int(filter_month), int(filter_year))
-    min_date_param = min_date_home if month_filter is None else MIN_DATA_STR
+    has_custom_month = request.args.get('month') is not None or request.args.get('year') is not None
+    if all_time:
+        month_filter = None
+        min_date_param = MIN_DATA_STR
+        include_residual_any_date = True
+    elif has_custom_month:
+        month_filter = (int(filter_month), int(filter_year))
+        min_date_param = MIN_DATA_STR
+        include_residual_any_date = False
+    else:
+        # Default: mese corrente + mese precedente
+        month_filter = None
+        min_date_param = min_date_home
+        include_residual_any_date = True
 
     lessons = get_unassigned_lessons(
         lesson_order,
@@ -620,16 +671,34 @@ def index():
         filter_paganti,
         hide_used_payments,
         month_filter,
-        min_date=min_date_param
+        min_date=min_date_param,
+        include_residual_any_date=include_residual_any_date
     )
 
     subscription_payments = []
     regular_payments = []
+    subscription_map = {}
+
+    if payments:
+        conn = get_db()
+        cursor = conn.cursor()
+        payment_ids = [p['id'] for p in payments]
+        placeholders = ','.join(['?' for _ in payment_ids])
+        cursor.execute(f'''
+            SELECT pagamento_id, lezioni_totali
+            FROM pagamenti_abbonamenti
+            WHERE pagamento_id IN ({placeholders})
+        ''', payment_ids)
+        subscription_map = {row['pagamento_id']: row['lezioni_totali'] for row in cursor.fetchall()}
+        conn.close()
+
     for payment in payments:
         amount = int(payment['somma'])
-        lessons_count = SUBSCRIPTION_PLANS.get(amount)
+        lessons_count = subscription_map.get(payment['id']) or SUBSCRIPTION_PLANS.get(amount)
         if lessons_count:
-            quota_per_lesson = amount // lessons_count if lessons_count else 0
+            quota_per_lesson = amount / lessons_count if lessons_count else 0
+            if quota_per_lesson.is_integer():
+                quota_per_lesson = int(quota_per_lesson)
             lessons_left = int(max(0, payment['residuo'] // quota_per_lesson)) if quota_per_lesson else 0
             lessons_used = lessons_count - lessons_left
             payment = dict(payment)
@@ -1212,6 +1281,68 @@ def api_manual_payment():
         conn.close()
 
 
+@app.route('/api/mark_subscription', methods=['POST'])
+def api_mark_subscription():
+    """Etichetta un pagamento come abbonamento impostando il numero di lezioni totali."""
+    data = request.get_json(silent=True) or {}
+    pagamento_id = data.get('pagamento_id')
+    lezioni_totali = data.get('lezioni_totali')
+
+    try:
+        pagamento_id = int(pagamento_id)
+        lezioni_totali = int(lezioni_totali)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Dati non validi'}), 400
+
+    if lezioni_totali <= 0:
+        return jsonify({'success': False, 'error': 'Lezioni totali deve essere > 0'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT 1 FROM pagamenti WHERE id_pagamento = ?', (pagamento_id,))
+        if cursor.fetchone() is None:
+            return jsonify({'success': False, 'error': 'Pagamento non trovato'}), 404
+
+        cursor.execute('''
+            INSERT INTO pagamenti_abbonamenti (pagamento_id, lezioni_totali, note)
+            VALUES (?, ?, 'Etichettato da interfaccia web')
+            ON CONFLICT(pagamento_id) DO UPDATE SET
+                lezioni_totali = excluded.lezioni_totali,
+                note = excluded.note
+        ''', (pagamento_id, lezioni_totali))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/unmark_subscription', methods=['POST'])
+def api_unmark_subscription():
+    """Rimuove l'etichetta di abbonamento da un pagamento."""
+    data = request.get_json(silent=True) or {}
+    pagamento_id = data.get('pagamento_id')
+
+    try:
+        pagamento_id = int(pagamento_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Dati non validi'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('DELETE FROM pagamenti_abbonamenti WHERE pagamento_id = ?', (pagamento_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/stats')
 def stats():
     """Pagina statistiche."""
@@ -1242,12 +1373,15 @@ def routines():
         filter_month = request.args.get('month', str(now.month))
         filter_year = request.args.get('year', str(now.year))
         month_filter = None if all_time or filter_day else (int(filter_month), int(filter_year))
-        payments, paganti_options = get_payments_overview(
+        payments, paganti_options, subscription_map = get_payments_overview(
             payment_order,
             filter_pagante=filter_pagante,
             month_filter=month_filter,
             day_filter=filter_day
         )
+        for payment in payments:
+            if payment['id'] in subscription_map:
+                payment['subscription_lessons'] = subscription_map[payment['id']]
         # Lezioni con debito > 0 per uso manuale
         lessons_raw = get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None)
         lessons_for_manual = []

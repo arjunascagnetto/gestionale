@@ -222,6 +222,31 @@
                                 Residuo: {{ payment.residuo }} {{ payment.valuta }}
                             </div>
                             <div class="text-xs text-gray-500">Stato: {{ payment.stato }}</div>
+                            {% if payment.subscription_lessons %}
+                            <div class="text-xs text-blue-600 font-semibold">Abbonamento: {{ payment.subscription_lessons }} lezioni</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mt-3 p-3 bg-slate-50 border border-slate-200 rounded">
+                        <div class="text-xs font-semibold text-slate-700 mb-2">Etichetta come abbonamento</div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="number" min="1" step="1"
+                                   class="w-24 border rounded px-2 py-1 text-sm subscription-count"
+                                   data-payment="{{ payment.id }}"
+                                   placeholder="Lezioni"
+                                   value="{{ payment.subscription_lessons or '' }}">
+                            <button type="button"
+                                    class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                    onclick="markSubscription({{ payment.id }})">
+                                Salva
+                            </button>
+                            <button type="button"
+                                    class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                    onclick="unmarkSubscription({{ payment.id }})">
+                                Rimuovi
+                            </button>
+                            <span id="subscription-status-{{ payment.id }}" class="text-xs text-gray-600"></span>
                         </div>
                     </div>
 
@@ -417,6 +442,76 @@
         })
         .catch((err) => {
             console.error('Errore quota manuale:', err);
+            statusSpan.classList.add('text-red-600');
+            statusSpan.textContent = 'Errore di rete';
+        });
+    }
+
+    function markSubscription(paymentId) {
+        const input = document.querySelector(`input.subscription-count[data-payment="${paymentId}"]`);
+        const statusSpan = document.getElementById(`subscription-status-${paymentId}`);
+        const lezioniTotali = input ? parseInt(input.value, 10) : null;
+
+        if (!lezioniTotali || lezioniTotali <= 0) {
+            alert('Inserisci un numero valido di lezioni.');
+            return;
+        }
+
+        statusSpan.textContent = 'Salvataggio...';
+        statusSpan.classList.remove('text-red-600', 'text-green-700');
+
+        fetch('/api/mark_subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pagamento_id: paymentId, lezioni_totali: lezioniTotali })
+        })
+        .then(async (response) => {
+            const data = await response.json();
+            return { ok: response.ok, data };
+        })
+        .then((result) => {
+            if (result.ok && result.data.success) {
+                statusSpan.classList.add('text-green-700');
+                statusSpan.textContent = 'Abbonamento salvato.';
+                setTimeout(() => window.location.reload(), 400);
+            } else {
+                statusSpan.classList.add('text-red-600');
+                statusSpan.textContent = result.data.error || 'Errore salvataggio';
+            }
+        })
+        .catch((err) => {
+            console.error('Errore abbonamento:', err);
+            statusSpan.classList.add('text-red-600');
+            statusSpan.textContent = 'Errore di rete';
+        });
+    }
+
+    function unmarkSubscription(paymentId) {
+        const statusSpan = document.getElementById(`subscription-status-${paymentId}`);
+        statusSpan.textContent = 'Rimozione...';
+        statusSpan.classList.remove('text-red-600', 'text-green-700');
+
+        fetch('/api/unmark_subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pagamento_id: paymentId })
+        })
+        .then(async (response) => {
+            const data = await response.json();
+            return { ok: response.ok, data };
+        })
+        .then((result) => {
+            if (result.ok && result.data.success) {
+                statusSpan.classList.add('text-green-700');
+                statusSpan.textContent = 'Abbonamento rimosso.';
+                setTimeout(() => window.location.reload(), 400);
+            } else {
+                statusSpan.classList.add('text-red-600');
+                statusSpan.textContent = result.data.error || 'Errore rimozione';
+            }
+        })
+        .catch((err) => {
+            console.error('Errore rimozione abbonamento:', err);
             statusSpan.classList.add('text-red-600');
             statusSpan.textContent = 'Errore di rete';
         });
