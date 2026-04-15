@@ -3,13 +3,24 @@
 Interfaccia Web - Gestione Storico Pagamenti e Lezioni
 Flask app per abbinare manualmente pagamenti storici a lezioni.
 """
+import json
+import os
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta, date
 from flask import Flask, render_template, request, redirect, url_for, jsonify
+from dotenv import load_dotenv
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except ImportError:  # pragma: no cover - dipendenza opzionale finche` il hook non viene usato
+    Fernet = None
+    InvalidToken = Exception
 
 app = Flask(__name__)
 DB_PATH = Path(__file__).parent.parent / "pagamenti.db"
+ENV_PATH = Path(__file__).parent.parent / ".env"
+load_dotenv(ENV_PATH)
 DEFAULT_LESSON_COST = 2000
 MIN_DATA_DATE = date(2025, 8, 1)
 MIN_DATA_STR = MIN_DATA_DATE.isoformat()
@@ -59,6 +70,31 @@ def ensure_subscription_table():
 
 ensure_subscription_table()
 
+
+def ensure_secure_messages_table():
+    """Tabella per messaggi testuali ricevuti dal nuovo hook cifrato."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS secure_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                external_message_id TEXT UNIQUE,
+                sender TEXT,
+                sent_at TEXT,
+                plaintext TEXT NOT NULL,
+                ciphertext TEXT NOT NULL,
+                metadata_json TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+ensure_secure_messages_table()
+
 def get_db():
     """Crea connessione database."""
     conn = sqlite3.connect(DB_PATH)
@@ -92,6 +128,19 @@ def get_student_default_cost(nome_studente, conn=None):
         conn.close()
 
     return row['costo'] if row else None
+
+
+def get_secure_hook_fernet():
+    """Restituisce l'istanza Fernet configurata per il nuovo hook cifrato."""
+    key = os.getenv('SECURE_HOOK_FERNET_KEY', '').strip()
+    if not key:
+        return None, 'SECURE_HOOK_FERNET_KEY non configurata'
+    if Fernet is None:
+        return None, 'Modulo cryptography non installato'
+    try:
+        return Fernet(key.encode('utf-8')), None
+    except Exception:
+        return None, 'SECURE_HOOK_FERNET_KEY non valida'
 
 
 def get_unassigned_lessons(order='DESC', filter_studenti=None, hide_paid=False, month_filter=None, min_date=MIN_DATA_STR):
@@ -484,6 +533,234 @@ def get_all_studenti():
     return studenti
 
 
+def get_student_lessons_overview(student_name=None, month_filter=None):
+    """
+    Restituisce storico lezioni per studente con stato di pagamento.
+
+    Args:
+        student_name: nome studente da filtrare, None = tutti
+        month_filter: tupla (mese, anno) o None
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = '''
+        SELECT
+            l.id_lezione,
+            l.nome_studente,
+            l.giorno,
+            l.ora,
+            l.costo,
+            l.gratis,
+            COALESCE(SUM(pl.quota_usata), 0) AS quota_pagata
+        FROM lezioni l
+        LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
+        WHERE l.giorno >= ?
+    '''
+    params = [MIN_DATA_STR]
+
+    if student_name:
+        query += ' AND l.nome_studente = ?'
+        params.append(student_name)
+
+    if month_filter:
+        month, year = month_filter
+        query += " AND strftime('%Y', l.giorno) = ? AND strftime('%m', l.giorno) = ?"
+        params.extend([str(year), f'{month:02d}'])
+
+    query += '''
+        GROUP BY l.id_lezione
+        ORDER BY l.giorno DESC, l.ora DESC
+    '''
+
+    cursor.execute(query, params)
+    lessons = []
+    summary = {
+        'total_lessons': 0,
+        'paid_lessons': 0,
+        'unpaid_lessons': 0,
+        'partial_lessons': 0,
+        'free_lessons': 0,
+        'total_due': 0,
+        'total_paid': 0,
+        'total_remaining': 0,
+    }
+
+    for row in cursor.fetchall():
+        costo = row['costo'] or 0
+        quota_pagata = row['quota_pagata'] or 0
+        remaining = max(0, costo - quota_pagata)
+        is_free = bool(row['gratis'])
+
+        if is_free:
+            payment_status = 'gratis'
+            summary['free_lessons'] += 1
+        elif remaining == 0:
+            payment_status = 'pagata'
+            summary['paid_lessons'] += 1
+        elif quota_pagata > 0:
+            payment_status = 'parziale'
+            summary['partial_lessons'] += 1
+        else:
+            payment_status = 'non_pagata'
+            summary['unpaid_lessons'] += 1
+
+        summary['total_lessons'] += 1
+        summary['total_due'] += costo
+        summary['total_paid'] += quota_pagata
+        summary['total_remaining'] += remaining
+
+        detail_cursor = conn.cursor()
+        detail_cursor.execute('''
+            SELECT
+                p.nome_pagante,
+                pl.quota_usata
+            FROM pagamenti_lezioni pl
+            JOIN pagamenti p ON p.id_pagamento = pl.pagamento_id
+            WHERE pl.lezione_id = ?
+            ORDER BY p.giorno ASC, p.ora ASC, pl.id ASC
+        ''', (row['id_lezione'],))
+        paganti_assoc = [{
+            'nome_pagante': payer_row['nome_pagante'],
+            'quota': payer_row['quota_usata']
+        } for payer_row in detail_cursor.fetchall()]
+
+        lessons.append({
+            'id': row['id_lezione'],
+            'studente': row['nome_studente'],
+            'giorno': row['giorno'],
+            'ora': row['ora'],
+            'costo': costo,
+            'quota_pagata': quota_pagata,
+            'remaining': remaining,
+            'gratis': is_free,
+            'payment_status': payment_status,
+            'paganti_assoc': paganti_assoc
+        })
+
+    conn.close()
+    return lessons, summary
+
+
+def get_student_workspace(student_name=None):
+    """
+    Workspace operativo arretrati centrato sullo studente.
+    Restituisce lezioni, associazione corrente, paganti candidati e pagamenti del pagante selezionato.
+    """
+    student_lessons, student_summary = get_student_lessons_overview(student_name=student_name, month_filter=None)
+    current_cost = None
+    current_payer = None
+    payer_candidates = []
+    payer_payments = []
+
+    if not student_name:
+        return {
+            'lessons': student_lessons,
+            'summary': student_summary,
+            'current_cost': current_cost,
+            'current_payer': current_payer,
+            'payer_candidates': payer_candidates,
+            'payer_payments': payer_payments,
+        }
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    current_cost = get_student_default_cost(student_name, conn)
+    if current_cost is None:
+        cursor.execute('''
+            SELECT costo
+            FROM lezioni
+            WHERE nome_studente = ? AND gratis = 0 AND giorno >= ?
+            ORDER BY giorno DESC, ora DESC
+            LIMIT 1
+        ''', (student_name, MIN_DATA_STR))
+        row = cursor.fetchone()
+        current_cost = row['costo'] if row and row['costo'] is not None else DEFAULT_LESSON_COST
+
+    cursor.execute('SELECT nome_pagante FROM associazioni WHERE nome_studente = ?', (student_name,))
+    assoc_row = cursor.fetchone()
+    current_payer = assoc_row['nome_pagante'] if assoc_row else None
+
+    cursor.execute(f'''
+        SELECT
+            p.nome_pagante,
+            COUNT(*) AS payments_count,
+            COALESCE(SUM(p.somma), 0) AS total_received,
+            COALESCE(SUM(p.somma - COALESCE(used.quota_usata, 0)), 0) AS total_residual
+        FROM pagamenti p
+        LEFT JOIN (
+            SELECT pagamento_id, SUM(quota_usata) AS quota_usata
+            FROM pagamenti_lezioni
+            GROUP BY pagamento_id
+        ) used ON p.id_pagamento = used.pagamento_id
+        WHERE p.giorno >= ?
+          AND p.stato NOT IN ({','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])})
+          AND p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)
+        GROUP BY p.nome_pagante
+        ORDER BY
+            CASE WHEN p.nome_pagante = ? THEN 0 ELSE 1 END,
+            total_residual DESC,
+            p.nome_pagante COLLATE NOCASE
+    ''', [MIN_DATA_STR, *EXCLUDED_PAYMENT_STATUSES, current_payer or ''])
+
+    payer_candidates = [{
+        'nome_pagante': row['nome_pagante'],
+        'payments_count': row['payments_count'],
+        'total_received': row['total_received'],
+        'total_residual': row['total_residual'],
+        'is_associated': row['nome_pagante'] == current_payer
+    } for row in cursor.fetchall()]
+
+    selected_payer = current_payer or (payer_candidates[0]['nome_pagante'] if payer_candidates else None)
+
+    if selected_payer:
+        cursor.execute(f'''
+            SELECT
+                p.id_pagamento,
+                p.giorno,
+                p.ora,
+                p.somma,
+                p.valuta,
+                p.stato,
+                COALESCE(used.quota_usata, 0) AS quota_utilizzata,
+                p.somma - COALESCE(used.quota_usata, 0) AS residuo
+            FROM pagamenti p
+            LEFT JOIN (
+                SELECT pagamento_id, SUM(quota_usata) AS quota_usata
+                FROM pagamenti_lezioni
+                GROUP BY pagamento_id
+            ) used ON p.id_pagamento = used.pagamento_id
+            WHERE p.nome_pagante = ?
+              AND p.giorno >= ?
+              AND p.stato NOT IN ({','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])})
+              AND p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)
+            ORDER BY p.giorno DESC, p.ora DESC
+        ''', [selected_payer, MIN_DATA_STR, *EXCLUDED_PAYMENT_STATUSES])
+
+        payer_payments = [{
+            'id': row['id_pagamento'],
+            'giorno': row['giorno'],
+            'ora': row['ora'],
+            'somma': row['somma'],
+            'valuta': row['valuta'],
+            'stato': row['stato'],
+            'quota_utilizzata': row['quota_utilizzata'],
+            'residuo': row['residuo']
+        } for row in cursor.fetchall()]
+
+    conn.close()
+    return {
+        'lessons': student_lessons,
+        'summary': student_summary,
+        'current_cost': current_cost,
+        'current_payer': selected_payer,
+        'associated_payer': current_payer,
+        'payer_candidates': payer_candidates,
+        'payer_payments': payer_payments,
+    }
+
+
 def get_all_paganti():
     """Recupera lista unica di TUTTI i paganti (inclusi quelli con residuo 0)."""
     conn = get_db()
@@ -711,6 +988,16 @@ def index():
             regular_payments.append(payment)
 
     suggestions = get_suggested_abbinamenti()
+    payments_for_manual = [
+        {
+            'id': p['id'],
+            'label': f"{p['nome_pagante']} - {p['giorno']} {p['ora']} (residuo {p['residuo']} {p['valuta']})",
+            'residuo': p['residuo'],
+            'valuta': p['valuta']
+        }
+        for p in payments
+        if p['residuo'] and p['residuo'] > 0
+    ]
 
     return render_template(
         'index.html',
@@ -718,6 +1005,7 @@ def index():
         subscription_payments=subscription_payments,
         regular_payments=regular_payments,
         suggestions=suggestions,
+        payments_for_manual=payments_for_manual,
         lesson_order=lesson_order,
         payment_order=payment_order,
         filter_studenti=filter_studenti or [],
@@ -1281,6 +1569,160 @@ def api_manual_payment():
         conn.close()
 
 
+@app.route('/api/secure_messages', methods=['POST'])
+def api_secure_messages():
+    """
+    Hook alternativo a Telegram.
+    Riceve un testo cifrato lato client, lo decifra con Fernet e lo salva in DB.
+    """
+    hook_token = os.getenv('SECURE_HOOK_TOKEN', '').strip()
+    auth_header = request.headers.get('X-Hook-Token', '').strip()
+
+    if not hook_token:
+        return jsonify({'success': False, 'error': 'SECURE_HOOK_TOKEN non configurato'}), 500
+    if auth_header != hook_token:
+        return jsonify({'success': False, 'error': 'Token non valido'}), 401
+
+    fernet, fernet_error = get_secure_hook_fernet()
+    if not fernet:
+        return jsonify({'success': False, 'error': fernet_error}), 500
+
+    data = request.get_json(silent=True) or {}
+    ciphertext = (data.get('ciphertext') or '').strip()
+    source = (data.get('source') or 'custom_hook').strip()
+    external_message_id = (data.get('message_id') or '').strip() or None
+    sender = (data.get('sender') or '').strip() or None
+    sent_at = (data.get('sent_at') or '').strip() or datetime.now().isoformat(timespec='seconds')
+    metadata = data.get('metadata') or {}
+
+    if not ciphertext:
+        return jsonify({'success': False, 'error': 'ciphertext obbligatorio'}), 400
+    if not isinstance(metadata, dict):
+        return jsonify({'success': False, 'error': 'metadata deve essere un oggetto JSON'}), 400
+
+    try:
+        plaintext = fernet.decrypt(ciphertext.encode('utf-8')).decode('utf-8')
+    except InvalidToken:
+        return jsonify({'success': False, 'error': 'Ciphertext non decifrabile'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Errore decifratura: {e}'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            INSERT INTO secure_messages (
+                source,
+                external_message_id,
+                sender,
+                sent_at,
+                plaintext,
+                ciphertext,
+                metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            source,
+            external_message_id,
+            sender,
+            sent_at,
+            plaintext,
+            ciphertext,
+            json.dumps(metadata, ensure_ascii=False)
+        ))
+        conn.commit()
+        return jsonify({'success': True, 'id': cursor.lastrowid})
+    except sqlite3.IntegrityError:
+        return jsonify({'success': True, 'duplicate': True, 'message': 'Messaggio già ricevuto'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/pay_lesson_direct', methods=['POST'])
+def api_pay_lesson_direct():
+    """
+    Crea un nuovo pagamento manuale e lo abbina subito alla lezione indicata.
+    Serve per chiudere una lezione dal tab principale senza creare prima il pagamento a mano.
+    """
+    data = request.get_json(silent=True) or {}
+    lesson_id = data.get('lesson_id')
+    nome_pagante = (data.get('nome_pagante') or '').strip()
+    valuta = (data.get('valuta') or 'RUB').strip().upper() or 'RUB'
+    giorno = (data.get('giorno') or '').strip() or date.today().isoformat()
+    ora = (data.get('ora') or '').strip() or datetime.now().strftime('%H:%M')
+
+    try:
+        lesson_id = int(lesson_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Lezione non valida'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            SELECT
+                l.nome_studente,
+                l.costo,
+                l.gratis,
+                COALESCE(SUM(pl.quota_usata), 0) AS quota_pagata
+            FROM lezioni l
+            LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
+            WHERE l.id_lezione = ?
+            GROUP BY l.id_lezione
+        ''', (lesson_id,))
+        lesson = cursor.fetchone()
+
+        if not lesson:
+            return jsonify({'success': False, 'error': 'Lezione non trovata'}), 404
+        if lesson['gratis']:
+            return jsonify({'success': False, 'error': 'La lezione e` marcata gratis'}), 400
+
+        costo = float(lesson['costo'] or DEFAULT_LESSON_COST)
+        quota_pagata = float(lesson['quota_pagata'] or 0)
+        restante = max(0, costo - quota_pagata)
+
+        if restante <= 0:
+            return jsonify({'success': False, 'error': 'La lezione risulta gia` pagata'}), 400
+
+        if not nome_pagante:
+            nome_pagante = lesson['nome_studente']
+
+        try:
+            datetime.strptime(giorno, '%Y-%m-%d')
+            datetime.strptime(ora, '%H:%M')
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Data o ora non valide'}), 400
+
+        cursor.execute('''
+            INSERT INTO pagamenti (nome_pagante, giorno, ora, somma, valuta, stato, fonte_msg_id, skipped, notificato)
+            VALUES (?, ?, ?, ?, ?, 'associato', NULL, 0, 0)
+        ''', (nome_pagante, giorno, ora, restante, valuta))
+        payment_id = cursor.lastrowid
+
+        cursor.execute('''
+            INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+            VALUES (?, ?, ?)
+        ''', (payment_id, lesson_id, restante))
+
+        save_association(cursor, nome_pagante, lesson['nome_studente'])
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'payment_id': payment_id,
+            'quota_usata': restante
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/api/mark_subscription', methods=['POST'])
 def api_mark_subscription():
     """Etichetta un pagamento come abbonamento impostando il numero di lezioni totali."""
@@ -1343,6 +1785,265 @@ def api_unmark_subscription():
     finally:
         conn.close()
 
+
+@app.route('/api/student_cost', methods=['POST'])
+def api_student_cost():
+    """Aggiorna il costo base di tutte le lezioni non gratis di uno studente."""
+    data = request.get_json(silent=True) or {}
+    student_name = (data.get('student_name') or '').strip()
+
+    try:
+        new_cost = float(data.get('cost'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Costo non valido'}), 400
+
+    if not student_name:
+        return jsonify({'success': False, 'error': 'Studente mancante'}), 400
+    if new_cost <= 0:
+        return jsonify({'success': False, 'error': 'Costo deve essere > 0'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE lezioni
+            SET costo = ?
+            WHERE nome_studente = ? AND gratis = 0 AND giorno >= ?
+        ''', (new_cost, student_name, MIN_DATA_STR))
+        conn.commit()
+        return jsonify({'success': True, 'updated': cursor.rowcount, 'cost': new_cost})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/student_assign_payer', methods=['POST'])
+def api_student_assign_payer():
+    """
+    Usa tutti i pagamenti residui di un pagante per coprire tutte le lezioni aperte di uno studente.
+    Opzionalmente salva l'associazione per riuso futuro.
+    """
+    data = request.get_json(silent=True) or {}
+    student_name = (data.get('student_name') or '').strip()
+    payer_name = (data.get('payer_name') or '').strip()
+    save_association_flag = bool(data.get('save_association', False))
+
+    if not student_name or not payer_name:
+        return jsonify({'success': False, 'error': 'Studente e pagante sono obbligatori'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            SELECT
+                l.id_lezione,
+                l.costo,
+                COALESCE(SUM(pl.quota_usata), 0) AS quota_pagata
+            FROM lezioni l
+            LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
+            WHERE l.nome_studente = ?
+              AND l.gratis = 0
+              AND l.giorno >= ?
+            GROUP BY l.id_lezione
+            HAVING l.costo - COALESCE(SUM(pl.quota_usata), 0) > 0
+            ORDER BY l.giorno ASC, l.ora ASC, l.id_lezione ASC
+        ''', (student_name, MIN_DATA_STR))
+        lessons = cursor.fetchall()
+
+        cursor.execute(f'''
+            SELECT
+                p.id_pagamento,
+                p.somma - COALESCE(SUM(pl.quota_usata), 0) AS residuo
+            FROM pagamenti p
+            LEFT JOIN pagamenti_lezioni pl ON p.id_pagamento = pl.pagamento_id
+            WHERE p.nome_pagante = ?
+              AND p.giorno >= ?
+              AND p.stato NOT IN ({','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])})
+              AND p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)
+            GROUP BY p.id_pagamento
+            HAVING residuo > 0
+            ORDER BY p.giorno ASC, p.ora ASC, p.id_pagamento ASC
+        ''', [payer_name, MIN_DATA_STR, *EXCLUDED_PAYMENT_STATUSES])
+        payments = [{
+            'id': row['id_pagamento'],
+            'residuo': float(row['residuo'] or 0)
+        } for row in cursor.fetchall()]
+
+        if not lessons:
+            return jsonify({'success': False, 'error': 'Nessuna lezione aperta per questo studente'}), 400
+        if not payments:
+            return jsonify({'success': False, 'error': 'Nessun pagamento residuo per questo pagante'}), 400
+
+        total_allocated = 0
+        touched_lessons = 0
+        touched_payments = set()
+        payment_index = 0
+
+        for lesson in lessons:
+            remaining = float((lesson['costo'] or 0) - (lesson['quota_pagata'] or 0))
+            if remaining <= 0:
+                continue
+
+            lesson_touched = False
+            while remaining > 0 and payment_index < len(payments):
+                current_payment = payments[payment_index]
+                if current_payment['residuo'] <= 0:
+                    payment_index += 1
+                    continue
+
+                quota = min(remaining, current_payment['residuo'])
+                cursor.execute('''
+                    SELECT id FROM pagamenti_lezioni
+                    WHERE pagamento_id = ? AND lezione_id = ?
+                ''', (current_payment['id'], lesson['id_lezione']))
+                existing = cursor.fetchone()
+
+                if existing:
+                    cursor.execute('''
+                        UPDATE pagamenti_lezioni
+                        SET quota_usata = quota_usata + ?
+                        WHERE id = ?
+                    ''', (quota, existing['id']))
+                else:
+                    cursor.execute('''
+                        INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                        VALUES (?, ?, ?)
+                    ''', (current_payment['id'], lesson['id_lezione'], quota))
+
+                current_payment['residuo'] -= quota
+                remaining -= quota
+                total_allocated += quota
+                touched_payments.add(current_payment['id'])
+                lesson_touched = True
+
+            if lesson_touched:
+                touched_lessons += 1
+
+        if save_association_flag:
+            save_association(cursor, payer_name, student_name)
+
+        if touched_payments:
+            placeholders = ','.join(['?' for _ in touched_payments])
+            cursor.execute(f'''
+                UPDATE pagamenti
+                SET stato = CASE
+                    WHEN somma - COALESCE((
+                        SELECT SUM(pl.quota_usata)
+                        FROM pagamenti_lezioni pl
+                        WHERE pl.pagamento_id = pagamenti.id_pagamento
+                    ), 0) = 0 THEN 'associato'
+                    ELSE 'sospeso'
+                END
+                WHERE id_pagamento IN ({placeholders})
+                  AND stato IN ('associato', 'sospeso')
+            ''', list(touched_payments))
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'allocated': total_allocated,
+            'lessons_updated': touched_lessons,
+            'payments_used': len(touched_payments)
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/student_create_missing_payments', methods=['POST'])
+def api_student_create_missing_payments():
+    """
+    Crea pagamenti mancanti per tutte le lezioni aperte di uno studente e li abbina subito.
+    Viene creato un pagamento per ogni lezione aperta usando il residuo della singola lezione.
+    """
+    data = request.get_json(silent=True) or {}
+    student_name = (data.get('student_name') or '').strip()
+    payer_name = (data.get('payer_name') or '').strip()
+    save_association_flag = bool(data.get('save_association', False))
+
+    if not student_name:
+        return jsonify({'success': False, 'error': 'Studente obbligatorio'}), 400
+    if not payer_name:
+        return jsonify({'success': False, 'error': 'Pagante obbligatorio'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            SELECT
+                l.id_lezione,
+                l.giorno,
+                l.ora,
+                l.costo,
+                COALESCE(SUM(pl.quota_usata), 0) AS quota_pagata
+            FROM lezioni l
+            LEFT JOIN pagamenti_lezioni pl ON l.id_lezione = pl.lezione_id
+            WHERE l.nome_studente = ?
+              AND l.gratis = 0
+              AND l.giorno >= ?
+            GROUP BY l.id_lezione
+            HAVING l.costo - COALESCE(SUM(pl.quota_usata), 0) > 0
+            ORDER BY l.giorno ASC, l.ora ASC, l.id_lezione ASC
+        ''', (student_name, MIN_DATA_STR))
+        lessons = cursor.fetchall()
+
+        if not lessons:
+            return jsonify({'success': False, 'error': 'Nessuna lezione aperta per questo studente'}), 400
+
+        created_payments = 0
+        total_created = 0
+
+        for lesson in lessons:
+            remaining = float((lesson['costo'] or 0) - (lesson['quota_pagata'] or 0))
+            if remaining <= 0:
+                continue
+
+            cursor.execute('''
+                INSERT INTO pagamenti (
+                    nome_pagante,
+                    giorno,
+                    ora,
+                    somma,
+                    valuta,
+                    stato,
+                    fonte_msg_id,
+                    skipped,
+                    notificato
+                )
+                VALUES (?, ?, ?, ?, 'RUB', 'associato', NULL, 0, 0)
+            ''', (payer_name, lesson['giorno'], lesson['ora'], remaining))
+            payment_id = cursor.lastrowid
+
+            cursor.execute('''
+                INSERT INTO pagamenti_lezioni (pagamento_id, lezione_id, quota_usata)
+                VALUES (?, ?, ?)
+            ''', (payment_id, lesson['id_lezione'], remaining))
+
+            created_payments += 1
+            total_created += remaining
+
+        if save_association_flag:
+            save_association(cursor, payer_name, student_name)
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'payments_created': created_payments,
+            'total_created': total_created
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/stats')
 def stats():
     """Pagina statistiche."""
@@ -1366,6 +2067,12 @@ def routines():
     filter_year = None
     payment_order = request.args.get('payment_order', 'DESC')
     all_time = request.args.get('all_time', '0') == '1'
+    selected_student = request.args.get('studente') or ''
+    selected_payer = request.args.get('payer') or ''
+    student_options = []
+    student_lessons = []
+    student_summary = None
+    student_workspace = None
 
     if tab == 'abbinamenti':
         abbinamenti = get_existing_abbinamenti()
@@ -1396,6 +2103,55 @@ def routines():
                     'remaining': remaining,
                     'costo': l['costo']
                 })
+    elif tab == 'studenti':
+        filter_month = request.args.get('month', str(now.month))
+        filter_year = request.args.get('year', str(now.year))
+        month_filter = None if all_time else (int(filter_month), int(filter_year))
+        student_options = get_all_studenti()
+        student_lessons, student_summary = get_student_lessons_overview(
+            student_name=selected_student or None,
+            month_filter=month_filter
+        )
+        if selected_student:
+            student_workspace = get_student_workspace(selected_student)
+            if selected_payer and student_workspace['payer_candidates']:
+                # Override visuale del pagante selezionato via querystring
+                student_workspace['current_payer'] = selected_payer
+                conn = get_db()
+                cursor = conn.cursor()
+                cursor.execute(f'''
+                    SELECT
+                        p.id_pagamento,
+                        p.giorno,
+                        p.ora,
+                        p.somma,
+                        p.valuta,
+                        p.stato,
+                        COALESCE(used.quota_usata, 0) AS quota_utilizzata,
+                        p.somma - COALESCE(used.quota_usata, 0) AS residuo
+                    FROM pagamenti p
+                    LEFT JOIN (
+                        SELECT pagamento_id, SUM(quota_usata) AS quota_usata
+                        FROM pagamenti_lezioni
+                        GROUP BY pagamento_id
+                    ) used ON p.id_pagamento = used.pagamento_id
+                    WHERE p.nome_pagante = ?
+                      AND p.giorno >= ?
+                      AND p.stato NOT IN ({','.join(['?' for _ in EXCLUDED_PAYMENT_STATUSES])})
+                      AND p.id_pagamento NOT IN (SELECT pagamento_id FROM pagamenti_cestinati)
+                    ORDER BY p.giorno DESC, p.ora DESC
+                ''', [selected_payer, MIN_DATA_STR, *EXCLUDED_PAYMENT_STATUSES])
+                student_workspace['payer_payments'] = [{
+                    'id': row['id_pagamento'],
+                    'giorno': row['giorno'],
+                    'ora': row['ora'],
+                    'somma': row['somma'],
+                    'valuta': row['valuta'],
+                    'stato': row['stato'],
+                    'quota_utilizzata': row['quota_utilizzata'],
+                    'residuo': row['residuo']
+                } for row in cursor.fetchall()]
+                conn.close()
     elif tab == 'approva':
         iframe_src = url_for('approva_paganti', embedded=1)
     elif tab == 'normalizza':
@@ -1418,6 +2174,12 @@ def routines():
         filter_year=filter_year,
         payment_order=payment_order,
         all_time=all_time,
+        selected_student=selected_student,
+        selected_payer=selected_payer,
+        student_options=student_options,
+        student_lessons=student_lessons,
+        student_summary=student_summary,
+        student_workspace=student_workspace,
         current_year=now.year,
         current_month=now.month,
         today_iso=now.date().isoformat(),

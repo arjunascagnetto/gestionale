@@ -33,6 +33,10 @@
                    class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'pagamenti' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
                     💰 Pagamenti
                 </a>
+                <a href="{{ url_for('routines', tab='studenti') }}"
+                   class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'studenti' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    🧾 Arretrato
+                </a>
                 <a href="{{ url_for('routines', tab='normalizza') }}"
                    class="px-4 py-2 text-sm font-medium border-b-2 {% if active_tab == 'normalizza' %}border-blue-500 text-blue-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
                     ✏️ Normalizza nomi
@@ -294,7 +298,7 @@
                                        class="w-full border rounded px-2 py-1 text-sm manual-quota"
                                        data-payment="{{ payment.id }}"
                                        placeholder="es. 1000"
-                                       value="{{ payment.residuo }}">
+                                       value="1000">
                                 <p class="text-[11px] text-gray-500 mt-1">Residuo pagamento: {{ payment.residuo }} {{ payment.valuta }}</p>
                             </div>
                             <div class="flex gap-2">
@@ -315,6 +319,269 @@
             <p class="text-gray-500 text-center py-8">Nessun pagamento trovato con i filtri attuali.</p>
             {% endif %}
         </div>
+        {% elif active_tab == 'studenti' %}
+        <div class="bg-white rounded-lg shadow-lg p-6 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold">🧾 Gestione arretrato per studente</h2>
+                    <p class="text-sm text-gray-600">Workspace arretrati per studente: costo unico, pagante selezionato e uso di tutti i suoi pagamenti.</p>
+                </div>
+                <form method="GET" action="{{ url_for('routines') }}">
+                    <input type="hidden" name="tab" value="studenti">
+                    <button class="px-4 py-2 bg-gray-100 text-sm rounded hover:bg-gray-200">🔄 Aggiorna</button>
+                </form>
+            </div>
+
+            <form method="GET" action="{{ url_for('routines') }}" class="bg-gray-50 p-4 rounded-lg grid md:grid-cols-4 gap-4">
+                <input type="hidden" name="tab" value="studenti">
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Studente</label>
+                    <select name="studente" class="w-full border rounded px-2 py-1 text-sm">
+                        <option value="">Tutti gli studenti</option>
+                        {% for nome in student_options %}
+                        <option value="{{ nome }}" {% if nome == selected_student %}selected{% endif %}>{{ nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Mese</label>
+                    <div class="flex gap-2">
+                        <select name="month" class="w-1/2 border rounded px-2 py-1 text-sm">
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if filter_month and m == filter_month|int %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="year" class="w-1/2 border rounded px-2 py-1 text-sm">
+                            {% for y in range(2025, current_year + 2) %}
+                            <option value="{{ y }}" {% if filter_year and y == filter_year|int %}selected{% endif %}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <label class="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                        <input type="checkbox" name="all_time" value="1" {% if all_time %}checked{% endif %}>
+                        Tutti i mesi
+                    </label>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Pagante visualizzato</label>
+                    <select name="payer" class="w-full border rounded px-2 py-1 text-sm">
+                        <option value="">Associazione attuale / automatico</option>
+                        {% if student_workspace %}
+                            {% for payer in student_workspace.payer_candidates %}
+                            <option value="{{ payer.nome_pagante }}" {% if payer.nome_pagante == selected_payer %}selected{% endif %}>
+                                {{ payer.nome_pagante }}{% if payer.total_residual %} (residuo {{ payer.total_residual }} RUB){% endif %}
+                            </option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Filtra</button>
+                    <a href="{{ url_for('routines', tab='studenti') }}" class="px-4 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300">Azzera</a>
+                </div>
+            </form>
+
+            {% if selected_student and student_workspace %}
+            <div class="grid lg:grid-cols-2 gap-4">
+                <div class="border border-emerald-200 bg-emerald-50 rounded-lg p-4 space-y-3">
+                    <div>
+                        <h3 class="text-lg font-semibold text-emerald-900">Costo unico studente</h3>
+                        <p class="text-sm text-emerald-800">Qui imposti il prezzo base su tutte le lezioni non gratis di {{ selected_student }}.</p>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-emerald-900 mb-1">Costo per lezione</label>
+                            <input id="student-cost-input" type="number" step="100" min="1"
+                                   value="{{ student_workspace.current_cost }}"
+                                   class="w-36 border rounded px-3 py-2 text-sm bg-white">
+                        </div>
+                        <button type="button"
+                                class="px-4 py-2 bg-emerald-700 text-white rounded text-sm hover:bg-emerald-800"
+                                onclick='updateStudentCost({{ selected_student|tojson }})'>
+                            Aggiorna costo
+                        </button>
+                        <span id="student-cost-status" class="text-sm text-gray-600"></span>
+                    </div>
+                </div>
+
+                <div class="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-3">
+                    <div>
+                        <h3 class="text-lg font-semibold text-blue-900">Pagante e associazione</h3>
+                        <p class="text-sm text-blue-800">Scegli il pagante e usa automaticamente tutti i suoi pagamenti residui per coprire le lezioni aperte dello studente.</p>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-blue-900 mb-1">Pagante selezionato</label>
+                            <select id="student-payer-select" class="w-full border rounded px-3 py-2 text-sm bg-white">
+                                {% for payer in student_workspace.payer_candidates %}
+                                <option value="{{ payer.nome_pagante }}" {% if payer.nome_pagante == student_workspace.current_payer %}selected{% endif %}>
+                                    {{ payer.nome_pagante }}{% if payer.is_associated %} [associato]{% endif %} - residuo {{ payer.total_residual }} RUB
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <label class="inline-flex items-center gap-2 text-sm text-blue-900">
+                            <input type="checkbox" id="save-student-association" {% if student_workspace.associated_payer %}checked{% endif %}>
+                            Salva/aggiorna questa associazione per riuso futuro
+                        </label>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button"
+                                    class="px-4 py-2 bg-blue-700 text-white rounded text-sm hover:bg-blue-800"
+                                    onclick='assignPayerToStudent({{ selected_student|tojson }})'>
+                                Usa tutti i pagamenti di questo pagante
+                            </button>
+                            <span id="student-payer-status" class="text-sm text-gray-600"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-amber-900">Crea pagamenti mancanti e associali</h3>
+                    <p class="text-sm text-amber-800">Se sai che lo studente ha gia` pagato ma i pagamenti non sono nel DB, crea un pagamento per ogni lezione ancora aperta e abbinalo subito.</p>
+                </div>
+                <div class="grid md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+                    <div>
+                        <label class="block text-xs font-semibold text-amber-900 mb-1">Pagante da usare per i nuovi pagamenti</label>
+                        <input id="student-create-payer"
+                               type="text"
+                               value="{{ student_workspace.current_payer or selected_student }}"
+                               class="w-full border rounded px-3 py-2 text-sm bg-white"
+                               placeholder="Nome pagante">
+                        <p class="mt-1 text-xs text-amber-900">I nuovi pagamenti useranno data e ora della singola lezione aperta e verranno marcati subito come associati.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button type="button"
+                                class="px-4 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700"
+                                onclick='createMissingPaymentsForStudent({{ selected_student|tojson }})'>
+                            Crea pagamenti per queste lezioni ed associali
+                        </button>
+                        <span id="student-create-payments-status" class="text-sm text-gray-600"></span>
+                    </div>
+                </div>
+            </div>
+
+            {% if student_workspace.payer_payments %}
+            <div class="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <div class="mb-3">
+                    <h3 class="text-lg font-semibold">Pagamenti del pagante selezionato</h3>
+                    <p class="text-sm text-gray-600">Questi sono i pagamenti che il sistema usera` in ordine cronologico sui debiti dello studente.</p>
+                </div>
+                <div class="space-y-2">
+                    {% for payment in student_workspace.payer_payments %}
+                    <div class="flex flex-wrap justify-between items-center gap-3 bg-white border rounded px-3 py-2">
+                        <div>
+                            <div class="text-sm font-semibold">{{ student_workspace.current_payer }}</div>
+                            <div class="text-xs text-gray-500">📅 {{ payment.giorno }} ⏰ {{ payment.ora }}</div>
+                        </div>
+                        <div class="text-right text-sm">
+                            <div>Totale: {{ payment.somma }} {{ payment.valuta }}</div>
+                            <div class="text-gray-500">Usato: {{ payment.quota_utilizzata }} {{ payment.valuta }}</div>
+                            <div class="{% if payment.residuo > 0 %}text-green-700{% else %}text-gray-500{% endif %} font-semibold">
+                                Residuo: {{ payment.residuo }} {{ payment.valuta }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            {% if student_summary %}
+            <div class="grid md:grid-cols-4 gap-3">
+                <div class="bg-slate-50 border border-slate-200 rounded p-4">
+                    <div class="text-xs text-slate-500">Lezioni totali</div>
+                    <div class="text-2xl font-bold">{{ student_summary.total_lessons }}</div>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-200 rounded p-4">
+                    <div class="text-xs text-emerald-700">Pagate / Gratis</div>
+                    <div class="text-2xl font-bold text-emerald-800">{{ student_summary.paid_lessons + student_summary.free_lessons }}</div>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded p-4">
+                    <div class="text-xs text-amber-700">Parziali / Non pagate</div>
+                    <div class="text-2xl font-bold text-amber-800">{{ student_summary.partial_lessons + student_summary.unpaid_lessons }}</div>
+                </div>
+                <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                    <div class="text-xs text-blue-700">Da incassare</div>
+                    <div class="text-2xl font-bold text-blue-800">{{ student_summary.total_remaining }} RUB</div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if student_lessons %}
+            <div class="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+                    <div>
+                        <h3 class="text-lg font-semibold">Lista date lezioni</h3>
+                        <p class="text-sm text-gray-600">Elenco semplice copiabile delle lezioni mostrate con i filtri attuali.</p>
+                    </div>
+                    <button type="button"
+                            class="px-3 py-2 bg-slate-700 text-white rounded text-sm hover:bg-slate-800"
+                            onclick="copyStudentDatesList()">
+                        Copia lista
+                    </button>
+                </div>
+                <textarea id="student-dates-list"
+                          class="w-full min-h-48 border rounded px-3 py-2 text-sm font-mono bg-white"
+                          readonly>{% for lesson in student_lessons %}{{ lesson.giorno }} {{ lesson.ora }}{% if selected_student %}{% else %} - {{ lesson.studente }}{% endif %} - {% if lesson.payment_status == 'pagata' %}PAGATA{% elif lesson.payment_status == 'parziale' %}PARZIALE{% elif lesson.payment_status == 'gratis' %}GRATIS{% else %}NON PAGATA{% endif %}
+{% endfor %}</textarea>
+            </div>
+
+            <div class="space-y-3">
+                {% for lesson in student_lessons %}
+                <div class="border rounded-lg p-4 bg-white shadow-sm">
+                    <div class="flex flex-wrap justify-between gap-3">
+                        <div>
+                            <div class="text-lg font-semibold">{{ lesson.studente }}</div>
+                            <div class="text-xs text-gray-500">📅 {{ lesson.giorno }} ⏰ {{ lesson.ora }}</div>
+                        </div>
+                        <div class="text-right">
+                            {% if lesson.payment_status == 'pagata' %}
+                            <span class="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs rounded font-semibold">Pagata</span>
+                            {% elif lesson.payment_status == 'parziale' %}
+                            <span class="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded font-semibold">Parziale</span>
+                            {% elif lesson.payment_status == 'gratis' %}
+                            <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded font-semibold">Gratis</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded font-semibold">Non pagata</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mt-3 grid md:grid-cols-3 gap-3 text-sm">
+                        <div class="bg-slate-50 rounded p-3">
+                            <div class="text-xs text-gray-500">Costo</div>
+                            <div class="font-semibold">{{ lesson.costo }} RUB</div>
+                        </div>
+                        <div class="bg-slate-50 rounded p-3">
+                            <div class="text-xs text-gray-500">Pagato</div>
+                            <div class="font-semibold">{{ lesson.quota_pagata }} RUB</div>
+                        </div>
+                        <div class="bg-slate-50 rounded p-3">
+                            <div class="text-xs text-gray-500">Residuo</div>
+                            <div class="font-semibold">{{ lesson.remaining }} RUB</div>
+                        </div>
+                    </div>
+                    {% if lesson.paganti_assoc %}
+                    <div class="mt-3 border-t pt-3">
+                        <div class="text-xs text-gray-500 mb-2">Pagante associato</div>
+                        <div class="flex flex-wrap gap-2">
+                            {% for payer in lesson.paganti_assoc %}
+                            <span class="px-2 py-1 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded">
+                                {{ payer.nome_pagante }}{% if payer.quota %} ({{ payer.quota }} RUB){% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-8">Nessuna lezione trovata con i filtri attuali.</p>
+            {% endif %}
+        </div>
         {% else %}
         <div class="bg-white rounded-lg shadow-lg p-4">
             <iframe src="{{ iframe_src }}" class="w-full min-h-[75vh] border rounded" loading="lazy"></iframe>
@@ -324,8 +591,168 @@
 {% endblock %}
 
 {% block scripts %}
-{% if active_tab == 'pagamenti' %}
+{% if active_tab == 'pagamenti' or active_tab == 'studenti' %}
 <script>
+    function copyStudentDatesList() {
+        const textarea = document.getElementById('student-dates-list');
+        if (!textarea) {
+            return;
+        }
+
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        navigator.clipboard.writeText(textarea.value)
+            .then(() => {
+                alert('Lista date copiata.');
+            })
+            .catch(() => {
+                document.execCommand('copy');
+                alert('Lista date copiata.');
+        });
+    }
+
+    {% if active_tab == 'studenti' %}
+    function updateStudentCost(studentName) {
+        const input = document.getElementById('student-cost-input');
+        const status = document.getElementById('student-cost-status');
+        const cost = input ? parseFloat(input.value) : null;
+
+        if (!studentName || !cost || cost <= 0) {
+            alert('Inserisci un costo valido.');
+            return;
+        }
+
+        status.textContent = 'Salvataggio...';
+        status.classList.remove('text-red-600', 'text-green-700');
+
+        fetch('/api/student_cost', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                student_name: studentName,
+                cost: cost
+            })
+        })
+        .then(async (response) => {
+            const data = await response.json();
+            return { ok: response.ok, data };
+        })
+        .then((result) => {
+            if (result.ok && result.data.success) {
+                status.classList.add('text-green-700');
+                status.textContent = `Aggiornate ${result.data.updated} lezioni.`;
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                status.classList.add('text-red-600');
+                status.textContent = result.data.error || 'Errore salvataggio';
+            }
+        })
+        .catch((error) => {
+            console.error('Errore aggiornamento costo studente:', error);
+            status.classList.add('text-red-600');
+            status.textContent = 'Errore di rete';
+        });
+    }
+
+    function assignPayerToStudent(studentName) {
+        const payerSelect = document.getElementById('student-payer-select');
+        const saveAssociation = document.getElementById('save-student-association');
+        const status = document.getElementById('student-payer-status');
+        const payerName = payerSelect ? payerSelect.value : '';
+
+        if (!studentName || !payerName) {
+            alert('Seleziona uno studente e un pagante.');
+            return;
+        }
+
+        if (!confirm(`Usare tutti i pagamenti residui di "${payerName}" per le lezioni aperte di "${studentName}"?`)) {
+            return;
+        }
+
+        status.textContent = 'Elaborazione...';
+        status.classList.remove('text-red-600', 'text-green-700');
+
+        fetch('/api/student_assign_payer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                student_name: studentName,
+                payer_name: payerName,
+                save_association: !!(saveAssociation && saveAssociation.checked)
+            })
+        })
+        .then(async (response) => {
+            const data = await response.json();
+            return { ok: response.ok, data };
+        })
+        .then((result) => {
+            if (result.ok && result.data.success) {
+                status.classList.add('text-green-700');
+                status.textContent = `Usati ${result.data.payments_used} pagamenti, aggiornate ${result.data.lessons_updated} lezioni.`;
+                setTimeout(() => window.location.reload(), 700);
+            } else {
+                status.classList.add('text-red-600');
+                status.textContent = result.data.error || 'Errore elaborazione';
+            }
+        })
+        .catch((error) => {
+            console.error('Errore assegnazione pagante:', error);
+            status.classList.add('text-red-600');
+            status.textContent = 'Errore di rete';
+        });
+    }
+
+    function createMissingPaymentsForStudent(studentName) {
+        const payerInput = document.getElementById('student-create-payer');
+        const saveAssociation = document.getElementById('save-student-association');
+        const status = document.getElementById('student-create-payments-status');
+        const payerName = payerInput ? payerInput.value.trim() : '';
+
+        if (!studentName || !payerName) {
+            alert('Studente o pagante mancanti.');
+            return;
+        }
+
+        if (!confirm(`Creare pagamenti mancanti per tutte le lezioni aperte di "${studentName}" usando come pagante "${payerName}"?`)) {
+            return;
+        }
+
+        status.textContent = 'Creazione in corso...';
+        status.classList.remove('text-red-600', 'text-green-700');
+
+        fetch('/api/student_create_missing_payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                student_name: studentName,
+                payer_name: payerName,
+                save_association: !!(saveAssociation && saveAssociation.checked)
+            })
+        })
+        .then(async (response) => {
+            const data = await response.json();
+            return { ok: response.ok, data };
+        })
+        .then((result) => {
+            if (result.ok && result.data.success) {
+                status.classList.add('text-green-700');
+                status.textContent = `Creati ${result.data.payments_created} pagamenti per ${result.data.total_created} RUB.`;
+                setTimeout(() => window.location.reload(), 700);
+            } else {
+                status.classList.add('text-red-600');
+                status.textContent = result.data.error || 'Errore creazione';
+            }
+        })
+        .catch((error) => {
+            console.error('Errore creazione pagamenti mancanti:', error);
+            status.classList.add('text-red-600');
+            status.textContent = 'Errore di rete';
+        });
+    }
+    {% endif %}
+
+    {% if active_tab == 'pagamenti' %}
     function resetManualDefaults(form) {
         const today = form.dataset.today;
         const now = form.dataset.now;
@@ -516,6 +943,7 @@
             statusSpan.textContent = 'Errore di rete';
         });
     }
+    {% endif %}
 </script>
 {% endif %}
 {% endblock %}
